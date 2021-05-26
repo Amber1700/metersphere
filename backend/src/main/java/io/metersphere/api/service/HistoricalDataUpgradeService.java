@@ -7,6 +7,7 @@ import io.metersphere.api.dto.SaveHistoricalDataUpgrade;
 import io.metersphere.api.dto.automation.ScenarioStatus;
 import io.metersphere.api.dto.definition.request.MsScenario;
 import io.metersphere.api.dto.definition.request.MsTestElement;
+import io.metersphere.api.dto.definition.request.assertions.MsAssertionDuration;
 import io.metersphere.api.dto.definition.request.assertions.MsAssertions;
 import io.metersphere.api.dto.definition.request.controller.MsIfController;
 import io.metersphere.api.dto.definition.request.extract.MsExtract;
@@ -75,7 +76,7 @@ public class HistoricalDataUpgradeService {
         return scenario;
     }
 
-    private MsScenario createScenario(Scenario oldScenario) {
+    private MsScenario createScenario(Scenario oldScenario, String projectId) {
         MsScenario scenario = new MsScenario();
         scenario.setOldVariables(oldScenario.getVariables());
         scenario.setName(oldScenario.getName());
@@ -84,12 +85,13 @@ public class HistoricalDataUpgradeService {
         scenario.setReferenced("Upgrade");
         scenario.setId(oldScenario.getId());
         scenario.setResourceId(UUID.randomUUID().toString());
+        scenario.setHeaders(oldScenario.getHeaders());
         LinkedList<MsTestElement> testElements = new LinkedList<>();
         int index = 1;
         for (Request request : oldScenario.getRequests()) {
             // 条件控制器
             MsIfController ifController = null;
-            if (request.getController() != null && StringUtils.isNotEmpty(request.getController().getValue())
+            if (request.getController() != null && StringUtils.isNotEmpty(request.getController().getOperator())
                     && StringUtils.isNotEmpty(request.getController().getVariable())) {
                 ifController = new MsIfController();
                 BeanUtils.copyBean(ifController, request.getController());
@@ -171,11 +173,15 @@ public class HistoricalDataUpgradeService {
                 element = new MsJDBCSampler();
                 SqlRequest request1 = (SqlRequest) request;
                 BeanUtils.copyBean(element, request1);
+
                 EnvironmentDTO dto = environmentDTOMap.get(request1.getDataSource());
                 if (dto != null) {
                     ((MsJDBCSampler) element).setEnvironmentId(dto.getEnvironmentId());
                     ((MsJDBCSampler) element).setDataSourceId(dto.getDatabaseConfig().getId());
                     ((MsJDBCSampler) element).setDataSource(dto.getDatabaseConfig());
+                }
+                if (CollectionUtils.isEmpty(request1.getVariables())) {
+                    ((MsJDBCSampler) element).setVariables(new ArrayList<>());
                 }
                 element.setType("JDBCSampler");
             }
@@ -198,6 +204,23 @@ public class HistoricalDataUpgradeService {
                 if (StringUtils.isEmpty(msAssertions.getName())) {
                     msAssertions.setName("Assertions");
                 }
+                // 给初始值
+                if (msAssertions.getDuration() == null) {
+                    msAssertions.setDuration(new MsAssertionDuration());
+                }
+                if (CollectionUtils.isEmpty(msAssertions.getJsr223())) {
+                    msAssertions.setJsr223(new LinkedList<>());
+                }
+                if (CollectionUtils.isEmpty(msAssertions.getXpath2())) {
+                    msAssertions.setXpath2(new LinkedList<>());
+                }
+                if (CollectionUtils.isEmpty(msAssertions.getJsonPath())) {
+                    msAssertions.setJsonPath(new LinkedList<>());
+                }
+                if (CollectionUtils.isEmpty(msAssertions.getRegex())) {
+                    msAssertions.setRegex(new LinkedList<>());
+                }
+
                 msAssertions.setType("Assertions");
                 msAssertions.setIndex(index + "");
                 msAssertions.setResourceId(UUID.randomUUID().toString());
@@ -212,6 +235,16 @@ public class HistoricalDataUpgradeService {
                 if (StringUtils.isEmpty(extract.getName())) {
                     extract.setName("Extract");
                 }
+                // 默认给初始值
+                if (CollectionUtils.isEmpty(extract.getJson())) {
+                    extract.setJson(new LinkedList<>());
+                }
+                if (CollectionUtils.isEmpty(extract.getXpath())) {
+                    extract.setXpath(new LinkedList<>());
+                }
+                if (CollectionUtils.isEmpty(extract.getRegex())) {
+                    extract.setRegex(new LinkedList<>());
+                }
                 extract.setType("Extract");
                 extract.setIndex(index + "");
                 extract.setHashTree(new LinkedList<>());
@@ -225,6 +258,7 @@ public class HistoricalDataUpgradeService {
                 if (StringUtils.isEmpty(preProcessor.getName())) {
                     preProcessor.setName("JSR223PreProcessor");
                 }
+                preProcessor.setScriptLanguage(request.getJsr223PreProcessor().getLanguage());
                 preProcessor.setType("JSR223PreProcessor");
                 preProcessor.setIndex(index + "");
                 preProcessor.setHashTree(new LinkedList<>());
@@ -238,6 +272,7 @@ public class HistoricalDataUpgradeService {
                 if (StringUtils.isEmpty(preProcessor.getName())) {
                     preProcessor.setName("JSR223PostProcessor");
                 }
+                preProcessor.setScriptLanguage(request.getJsr223PostProcessor().getLanguage());
                 preProcessor.setType("JSR223PostProcessor");
                 preProcessor.setIndex(index + "");
                 preProcessor.setHashTree(new LinkedList<>());
@@ -364,6 +399,7 @@ public class HistoricalDataUpgradeService {
             MsScenario scenarioTest = createScenarioByTest(test);
             LinkedList<MsTestElement> listSteps = new LinkedList<>();
             List<Scenario> scenarios = JSON.parseArray(test.getScenarioDefinition(), Scenario.class);
+            String envId = null;
             if (CollectionUtils.isNotEmpty(scenarios)) {
                 // 批量处理
                 for (Scenario scenario : scenarios) {
@@ -372,7 +408,7 @@ public class HistoricalDataUpgradeService {
                     }
                     scenario.setId(test.getId() + "=" + scenario.getId());
                     scenario.setName(test.getName() + "_" + scenario.getName());
-                    MsScenario scenario1 = createScenario(scenario);
+                    MsScenario scenario1 = createScenario(scenario, saveHistoricalDataUpgrade.getProjectId());
                     String scenarioDefinition = JSON.toJSONString(scenario1);
                     num++;
                     createApiScenarioWithBLOBs(saveHistoricalDataUpgrade, scenario.getId(), scenario.getName(), scenario.getRequests().size(), scenarioDefinition, mapper, num);
@@ -384,10 +420,17 @@ public class HistoricalDataUpgradeService {
                     step.setResourceId(UUID.randomUUID().toString());
                     step.setReferenced("REF");
                     listSteps.add(step);
+                    if (StringUtils.isNotEmpty(scenario.getEnvironmentId())) {
+                        envId = scenario.getEnvironmentId();
+                    }
                 }
             }
             num++;
             scenarioTest.setHashTree(listSteps);
+            if (StringUtils.isNotEmpty(envId)) {
+                scenarioTest.setEnvironmentId(envId);
+            }
+
             String scenarioDefinition = JSON.toJSONString(scenarioTest);
             createApiScenarioWithBLOBs(saveHistoricalDataUpgrade, scenarioTest.getId(), scenarioTest.getName(), listSteps.size(), scenarioDefinition, mapper, num);
         }

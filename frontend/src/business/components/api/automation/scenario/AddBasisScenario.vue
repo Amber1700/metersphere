@@ -58,7 +58,7 @@
 
 <script>
   import {WORKSPACE_ID} from '@/common/js/constants';
-  import {getCurrentUser, getUUID, getCurrentProjectID} from "@/common/js/utils";
+  import {getCurrentUser, getUUID} from "@/common/js/utils";
   import MsDialogFooter from "@/business/components/common/components/MsDialogFooter";
 
   export default {
@@ -74,7 +74,7 @@
         rule: {
           name: [
             {required: true, message: this.$t('test_track.case.input_name'), trigger: 'blur'},
-            {max: 50, message: this.$t('test_track.length_less_than') + '50', trigger: 'blur'}
+            {max: 100, message: this.$t('test_track.length_less_than') + '100', trigger: 'blur'}
           ],
           principal: [{
             required: true,
@@ -84,34 +84,43 @@
         },
       }
     },
+    computed: {
+      projectId() {
+        return this.$store.state.projectId
+      },
+    },
     methods: {
       saveScenario(saveAs) {
         this.$refs['scenarioForm'].validate((valid) => {
           if (valid) {
             let path = "/api/automation/create";
             this.setParameter();
-            this.$fileUpload(path, null, [], this.scenarioForm, () => {
+            if (saveAs) {
+              this.scenarioForm.request = JSON.stringify(this.scenarioForm.request);
+              this.$emit('saveAsEdit', this.scenarioForm);
               this.visible = false;
-              if (saveAs) {
-                this.scenarioForm.request = JSON.stringify(this.scenarioForm.request);
-                this.$emit('saveAsEdit', this.scenarioForm);
-              } else {
+            } else {
+              this.$fileUpload(path, null, [], this.scenarioForm, () => {
+                this.visible = false;
                 this.$emit('refresh');
-              }
-            });
+              });
+            }
           } else {
             return false;
           }
         })
       },
       setParameter() {
-        this.scenarioForm.projectId = getCurrentProjectID();
+        this.scenarioForm.projectId = this.projectId;
         this.scenarioForm.id = getUUID().substring(0, 8);
         this.scenarioForm.protocol = this.currentProtocol;
 
         if (this.currentModule && this.currentModule.id != "root") {
           this.scenarioForm.modulePath = this.currentModule.method !== undefined ? this.currentModule.method : null;
           this.scenarioForm.apiScenarioModuleId = this.currentModule.id;
+        } else {
+          this.scenarioForm.modulePath = this.$t("commons.module_title");
+          this.scenarioForm.apiScenarioModuleId = "default-module";
         }
       },
       getMaintainerOptions() {

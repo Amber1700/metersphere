@@ -8,7 +8,7 @@
             <img :src="'/display/file/loginLogo'" alt="">
           </div>
           <div class="welcome">
-            <span>{{ $t('commons.welcome') }}</span>
+            <span>{{ loginTitle }}</span>
           </div>
         </div>
 
@@ -46,7 +46,7 @@
       <div class="divider"/>
 
       <el-col :span="12">
-        <img class="login-image" :src="'/display/file/loginImage'">
+        <img class="login-image" :src="'/display/file/loginImage'" alt="">
       </el-col>
 
     </el-row>
@@ -55,8 +55,8 @@
 </template>
 
 <script>
-import {saveLocalStorage} from '@/common/js/utils';
-import {DEFAULT_LANGUAGE} from "@/common/js/constants";
+import {publicKeyEncrypt, saveLocalStorage} from '@/common/js/utils';
+import {DEFAULT_LANGUAGE, PRIMARY_COLOR} from "@/common/js/constants";
 
 const requireComponent = require.context('@/business/components/xpack/', true, /\.vue$/);
 const display = requireComponent.keys().length > 0 ? requireComponent("./display/Display.vue") : {};
@@ -85,12 +85,16 @@ export default {
       msg: '',
       ready: false,
       openLdap: false,
-      loginTitle: this.$t("commons.login") + " MeterSphere",
+      loginTitle: this.$t("commons.welcome"),
       authSources: [],
       loginUrl: 'signin',
     }
   },
   beforeCreate() {
+    this.$get('/system/theme', res => {
+      this.color = res.data ? res.data : PRIMARY_COLOR;
+      document.body.style.setProperty('--primary_color', this.color);
+    })
     this.result = this.$get("/isLogin").then(response => {
 
       if (display.default !== undefined) {
@@ -103,6 +107,8 @@ export default {
 
       if (!response.data.success) {
         this.ready = true;
+        // 保存公钥
+        localStorage.setItem("publicKey", response.data.message);
       } else {
         let user = response.data.data;
         saveLocalStorage(response.data);
@@ -112,6 +118,9 @@ export default {
     });
     this.$get("/ldap/open", response => {
       this.openLdap = response.data;
+      if (this.openLdap){
+        this.form.authenticate = 'LDAP';
+      }
     })
   },
   created: function () {
@@ -159,7 +168,15 @@ export default {
       });
     },
     doLogin() {
-      this.result = this.$post(this.loginUrl, this.form, response => {
+      let publicKey = localStorage.getItem("publicKey");
+
+      let form = {
+        username: publicKeyEncrypt(this.form.username, publicKey),
+        password: publicKeyEncrypt(this.form.password, publicKey),
+        authenticate: this.form.authenticate
+      };
+
+      this.result = this.$post(this.loginUrl, form, response => {
         saveLocalStorage(response);
         sessionStorage.setItem('loginSuccess', 'true');
         this.getLanguage(response.data.language);
@@ -187,7 +204,7 @@ export default {
 
 <style scoped>
 .container {
-  width: 1440px;
+  width: 1200px;
   height: 810px;
   margin: calc((100vh - 810px) / 2) auto 0;
   background-color: #FFFFFF;
@@ -200,6 +217,7 @@ export default {
 
 .title img {
   width: 293px;
+  max-height: 60px;
   margin-top: 165px;
 }
 
@@ -219,7 +237,7 @@ export default {
   margin-top: 12px;
   margin-bottom: 75px;
   font-size: 14px;
-  color: #843697;
+  color: var(--primary_color);
   line-height: 14px;
   text-align: center;
 }
@@ -232,18 +250,18 @@ export default {
 
 .btn > .submit {
   border-radius: 70px;
-  border-color: #8B479B;
-  background-color: #8B479B;
+  border-color: var(--primary_color);
+  background-color: var(--primary_color);
 }
 
 .btn > .submit:hover {
-  border-color: rgba(139, 71, 155, 0.9);
-  background-color: rgba(139, 71, 155, 0.9);
+  border-color: var(--primary_color);
+  background-color: var(--primary_color);
 }
 
 .btn > .submit:active {
-  border-color: rgba(139, 71, 155, 0.8);
-  background-color: rgba(139, 71, 155, 0.8);
+  border-color: var(--primary_color);
+  background-color: var(--primary_color);
 }
 
 .el-form-item:first-child {
@@ -251,13 +269,13 @@ export default {
 }
 
 /deep/ .el-radio__input.is-checked .el-radio__inner {
-  background-color: #783887;
-  background: #783887;
-  border-color: #783887;
+  background-color: var(--primary_color);
+  background: var(--primary_color);
+  border-color: var(--primary_color);
 }
 
 /deep/ .el-radio__input.is-checked + .el-radio__label {
-  color: #783887;
+  color: var(--primary_color);
 }
 
 /deep/ .el-input__inner {
@@ -273,7 +291,7 @@ export default {
 }
 
 /deep/ .el-input__inner:focus {
-  border: 1px solid #783887 !important;
+  border: 1px solid var(--primary_color) !important;
 }
 
 .divider {
@@ -293,6 +311,7 @@ body {
   color: #2B415C;
   -webkit-font-smoothing: antialiased;
   margin: 0;
+  height: auto;
 }
 
 .form .el-input > .el-input__inner {

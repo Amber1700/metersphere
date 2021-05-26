@@ -1,57 +1,85 @@
 <template>
-  <api-base-component
-    v-loading="loading"
-    @copy="copyRow"
-    @remove="remove"
-    :is-show-name-input="!isDeletedOrRef"
-    :data="request"
-    :draggable="true"
-    :color="displayColor.color"
-    :background-color="displayColor.backgroundColor"
-    :title="displayTitle">
+  <div>
+    <api-base-component
+      v-loading="loading"
+      @copy="copyRow"
+      @remove="remove"
+      @active="active"
+      :is-show-name-input="!isDeletedOrRef"
+      :data="request"
+      :draggable="draggable"
+      :color="displayColor.color"
+      :background-color="displayColor.backgroundColor"
+      :is-max="isMax"
+      :show-btn="showBtn"
+      :title="displayTitle">
 
-    <template v-slot:behindHeaderLeft>
-      <el-tag size="mini" style="margin-left: 20px" v-if="request.referenced==='Deleted'" type="danger">{{$t('api_test.automation.reference_deleted')}}</el-tag>
-      <el-tag size="mini" style="margin-left: 20px" v-if="request.referenced==='Copy'">{{ $t('commons.copy') }}</el-tag>
-      <el-tag size="mini" style="margin-left: 20px" v-if="request.referenced ==='REF'">{{ $t('api_test.scenario.reference') }}</el-tag>
-      <ms-run :debug="true" :reportId="reportId" :run-data="runData"
-              @runRefresh="runRefresh" ref="runTest"/>
+      <template v-slot:behindHeaderLeft>
+        <el-tag size="mini" class="ms-tag" v-if="request.referenced==='Deleted'" type="danger">{{$t('api_test.automation.reference_deleted')}}</el-tag>
+        <el-tag size="mini" class="ms-tag" v-if="request.referenced==='Copy'">{{ $t('commons.copy') }}</el-tag>
+        <el-tag size="mini" class="ms-tag" v-if="request.referenced ==='REF'">{{ $t('api_test.scenario.reference') }}</el-tag>
+        <span class="ms-tag">{{getProjectName(request.projectId)}}</span>
+      </template>
 
-    </template>
+      <template v-slot:button>
+        <el-tooltip :content="$t('api_test.run')" placement="top">
+          <el-button @click="run" icon="el-icon-video-play" style="padding: 5px" class="ms-btn" size="mini" circle/>
+        </el-tooltip>
+      </template>
 
-    <template v-slot:button>
-      <el-tooltip :content="$t('api_test.run')" placement="top">
-        <el-button @click="run" icon="el-icon-video-play" style="background-color: #409EFF;color: white;" size="mini" circle/>
-      </el-tooltip>
-    </template>
+      <!--请求内容-->
+      <template v-slot:request>
+        <customize-req-info :is-customize-req="isCustomizeReq" :request="request"/>
+        <p class="tip">{{ $t('api_test.definition.request.req_param') }} </p>
+        <ms-api-request-form v-if="request.protocol==='HTTP' || request.type==='HTTPSamplerProxy'"
+                             :isShowEnable="true"
+                             :referenced="true"
+                             :headers="request.headers "
+                             :request="request"/>
+        <esb-definition v-if="showXpackCompnent&&request.esbDataStruct!=null"
+                        v-xpack
+                        :request="request"
+                        :showScript="false"
+                        ref="esbDefinition"/>
+        <ms-tcp-basis-parameters v-if="(request.protocol==='TCP'|| request.type==='TCPSampler')&& request.esbDataStruct==null "
+                                 :request="request"
+                                 :showScript="false"/>
+        <ms-sql-basis-parameters v-if="request.protocol==='SQL'|| request.type==='JDBCSampler'"
+                                 :request="request" :is-scenario="false" :environment="environment"
+                                 :showScript="false"/>
+        <ms-dubbo-basis-parameters v-if="request.protocol==='DUBBO' || request.protocol==='dubbo://'|| request.type==='DubboSampler'"
+                                   :request="request"
+                                   :showScript="false"/>
+      </template>
+      <!-- 执行结果内容 -->
+      <template v-slot:result>
+        <p class="tip">{{ $t('api_test.definition.request.res_param') }} </p>
+        <div v-if="request.result">
+          <el-tabs v-model="request.activeName" closable class="ms-tabs">
+            <el-tab-pane :label="item.name" :name="item.name" v-for="(item,index) in request.result.scenarios" :key="index">
+              <div v-for="(result,i) in item.requestResults" :key="i" style="margin-bottom: 5px">
+                <api-response-component v-if="result.id===request.id" :result="result"/>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+        <div v-else-if="showXpackCompnent&&request.backEsbDataStruct != null">
+          <esb-definition-response v-xpack v-if="showXpackCompnent" :currentProtocol="request.protocol" :request="request" :is-api-component="false"
+                                   :show-options-button="false" :show-header="true" :result="request.requestResult"/>
+        </div>
+        <div v-else>
+          <api-response-component :currentProtocol="request.protocol" :result="request.requestResult"/>
+        </div>
+        <!-- 保存操作 -->
+        <el-button type="primary" size="small" class="ms-btn-flot" @click="saveTestCase(item)" v-if="!request.referenced">
+          {{ $t('commons.save') }}
+        </el-button>
+      </template>
+    </api-base-component>
+    <ms-run :debug="true" :reportId="reportId" :run-data="runData" :env-map="envMap"
+            @runRefresh="runRefresh" ref="runTest"/>
 
-    <div v-if="request.protocol === 'HTTP'">
-      <el-input :placeholder="$t('api_test.definition.request.path_all_info')" v-if="request.url" v-model="request.url" style="width: 85%;margin-top: 10px" size="small">
-        <el-select v-model="request.method" slot="prepend" style="width: 100px" size="small">
-          <el-option v-for="item in reqOptions" :key="item.id" :label="item.label" :value="item.id"/>
-        </el-select>
-      </el-input>
-      <el-input :placeholder="$t('api_test.definition.request.path_all_info')" v-else v-model="request.path" style="width: 85%;margin-top: 10px" size="small">
-        <el-select v-model="request.method" slot="prepend" style="width: 100px" size="small">
-          <el-option v-for="item in reqOptions" :key="item.id" :label="item.label" :value="item.id"/>
-        </el-select>
-      </el-input>
-    </div>
-    <p class="tip">{{$t('api_test.definition.request.req_param')}} </p>
-    <ms-api-request-form :isShowEnable="true" :referenced="true" :headers="request.headers " :request="request" v-if="request.protocol==='HTTP' || request.type==='HTTPSamplerProxy'"/>
-    <ms-tcp-basis-parameters :request="request" v-if="request.protocol==='TCP'|| request.type==='TCPSampler'"/>
-    <ms-sql-basis-parameters :request="request" v-if="request.protocol==='SQL'|| request.type==='JDBCSampler'" :showScript="false"/>
-    <ms-dubbo-basis-parameters :request="request" v-if="request.protocol==='DUBBO' || request.protocol==='dubbo://'|| request.type==='DubboSampler'" :showScript="false"/>
-
-    <p class="tip">{{$t('api_test.definition.request.res_param')}} </p>
-    <api-response-component :currentProtocol="request.protocol" :result="request.requestResult"/>
-
-    <!-- 保存操作 -->
-    <el-button type="primary" size="small" style="margin: 20px; float: right" @click="saveTestCase(item)" v-if="!request.referenced">
-      {{$t('commons.save')}}
-    </el-button>
-
-  </api-base-component>
+  </div>
 </template>
 
 <script>
@@ -59,12 +87,16 @@
   import MsTcpBasisParameters from "../../../definition/components/request/tcp/TcpBasisParameters";
   import MsDubboBasisParameters from "../../../definition/components/request/dubbo/BasisParameters";
   import MsApiRequestForm from "../../../definition/components/request/http/ApiHttpRequestForm";
-  import {REQ_METHOD} from "../../../definition/model/JsonData";
   import MsRequestResultTail from "../../../definition/components/response/RequestResultTail";
   import MsRun from "../../../definition/components/Run";
-  import {getUUID} from "@/common/js/utils";
+  import {getUUID, getCurrentProjectID} from "@/common/js/utils";
   import ApiBaseComponent from "../common/ApiBaseComponent";
   import ApiResponseComponent from "./ApiResponseComponent";
+  import CustomizeReqInfo from "@/business/components/api/automation/scenario/common/CustomizeReqInfo";
+
+  const requireComponent = require.context('@/business/components/xpack/', true, /\.vue$/);
+  const esbDefinition = (requireComponent != null && requireComponent.keys().length) > 0 ? requireComponent("./apidefinition/EsbDefinition.vue") : {};
+  const esbDefinitionResponse = (requireComponent != null && requireComponent.keys().length) > 0 ? requireComponent("./apidefinition/EsbDefinitionResponse.vue") : {};
 
   export default {
     name: "MsApiComponent",
@@ -76,37 +108,48 @@
         type: Boolean,
         default: false,
       },
+      isMax: {
+        type: Boolean,
+        default: false,
+      },
+      showBtn: {
+        type: Boolean,
+        default: true,
+      },
       currentEnvironmentId: String,
+      projectList: Array,
+      envMap: Map
     },
     components: {
+      CustomizeReqInfo,
       ApiBaseComponent, ApiResponseComponent,
-      MsSqlBasisParameters, MsTcpBasisParameters, MsDubboBasisParameters, MsApiRequestForm, MsRequestResultTail, MsRun
+      MsSqlBasisParameters, MsTcpBasisParameters, MsDubboBasisParameters, MsApiRequestForm, MsRequestResultTail, MsRun,
+      "esbDefinition": esbDefinition.default,
+      "esbDefinitionResponse": esbDefinitionResponse.default
     },
     data() {
       return {
         loading: false,
-        reqOptions: REQ_METHOD,
         reportId: "",
         runData: [],
         isShowInput: false,
+        showXpackCompnent: false,
+        environment: {},
       }
     },
     created() {
       if (!this.request.requestResult) {
         this.request.requestResult = {responseResult: {}};
       }
+      // 跨项目关联，如果没有ID，则赋值本项目ID
+      if (!this.request.projectId) {
+        this.request.projectId = getCurrentProjectID();
+      }
       // 加载引用对象数据
       this.getApiInfo();
       if (this.request.protocol === 'HTTP') {
-        try {
-          let urlObject = new URL(this.request.url);
-          let url = urlObject.protocol + "//" + urlObject.host + "/";
-        } catch (e) {
-          if (this.request.url) {
-            this.request.path = this.request.url;
-            this.request.url = undefined;
-          }
-        }
+        this.setUrl(this.request.url);
+        this.setUrl(this.request.path);
         // 历史数据 auth 处理
         if (this.request.hashTree) {
           for (let index in this.request.hashTree) {
@@ -117,6 +160,15 @@
           }
         }
       }
+      if (requireComponent != null && JSON.stringify(esbDefinition) != '{}' && JSON.stringify(esbDefinitionResponse) != '{}') {
+        this.showXpackCompnent = true;
+      }
+      this.getEnvironments();
+    },
+    watch: {
+      envMap() {
+        this.getEnvironments();
+      },
     },
     computed: {
       displayColor() {
@@ -171,14 +223,34 @@
           return true
         }
         return false;
-      }
+      },
     },
     methods: {
+      getEnvironments() {
+        this.environment = {};
+        let id = this.envMap.get(this.request.projectId);
+        this.$get('/api/environment/get/' + id, response => {
+          this.environment = response.data;
+        });
+      },
       remove() {
         this.$emit('remove', this.request, this.node);
       },
       copyRow() {
         this.$emit('copyRow', this.request, this.node);
+      },
+      setUrl(url) {
+        try {
+          new URL(url);
+          this.request.url = url;
+        } catch (e) {
+          if (url && (!url.startsWith("http://") || !url.startsWith("https://"))) {
+            if (!this.isCustomizeReq) {
+              this.request.path = url;
+              this.request.url = undefined;
+            }
+          }
+        }
       },
       getApiInfo() {
         if (this.request.id && this.request.referenced === 'REF') {
@@ -192,7 +264,8 @@
               this.request.enable = enable;
               if (response.data.path && response.data.path != null) {
                 this.request.path = response.data.path;
-                this.request.url = response.data.path;
+                this.request.url = response.data.url;
+                this.setUrl(this.request.path);
               }
               if (response.data.method && response.data.method != null) {
                 this.request.method = response.data.method;
@@ -200,6 +273,8 @@
               this.request.requestResult = requestResult;
               this.request.id = response.data.id;
               this.request.disabled = true;
+              this.request.root = true;
+              this.request.projectId = response.data.projectId;
               this.reload();
               this.sort();
             } else {
@@ -228,29 +303,46 @@
       },
       active(item) {
         this.request.active = !this.request.active;
+        if (this.node) {
+          this.node.expanded = this.request.active;
+        }
         this.reload();
       },
       run() {
-        if (!this.currentEnvironmentId) {
-          this.$error(this.$t('api_test.environment.select_environment'));
-          return;
+        if (this.isApiImport || this.request.isRefEnvironment) {
+          if (this.request.type && (this.request.type === "HTTPSamplerProxy" || this.request.type === "JDBCSampler" || this.request.type === "TCPSampler")) {
+            if (!this.envMap || this.envMap.size === 0) {
+              this.$warning("请在环境配置中为该步骤所属项目选择运行环境！");
+              return false;
+            } else if (this.envMap && this.envMap.size > 0) {
+              const env = this.envMap.get(this.request.projectId);
+              if (!env) {
+                this.$warning("请在环境配置中为该步骤所属项目选择运行环境！");
+                return false;
+              }
+            }
+          }
         }
         this.request.active = true;
         this.loading = true;
         this.runData = [];
+        this.runData.projectId = this.request.projectId;
         this.request.useEnvironment = this.currentEnvironmentId;
+        this.request.customizeReq = this.isCustomizeReq;
         let debugData = {
           id: this.currentScenario.id, name: this.currentScenario.name, type: "scenario",
-          variables: this.currentScenario.variables, referenced: 'Created', enableCookieShare: this.enableCookieShare,
-          environmentId: this.currentEnvironmentId, hashTree: [this.request]
+          variables: this.currentScenario.variables, referenced: 'Created', headers: this.currentScenario.headers,
+          enableCookieShare: this.enableCookieShare, environmentId: this.currentEnvironmentId, hashTree: [this.request],
         };
         this.runData.push(debugData);
         /*触发执行操作*/
-        this.reportId = getUUID().substring(0, 8);
+        this.reportId = getUUID();
       },
       runRefresh(data) {
         this.request.requestResult = data;
+        this.request.result = undefined;
         this.loading = false;
+        this.$emit('refReload', this.request, this.node);
       },
       reload() {
         this.loading = true
@@ -258,6 +350,10 @@
           this.loading = false
         })
       },
+      getProjectName(id) {
+        const project = this.projectList.find(p => p.id === id);
+        return project ? project.name : "";
+      }
     }
   }
 </script>
@@ -270,7 +366,7 @@
   }
 
   /deep/ .el-card__body {
-    padding: 15px;
+    padding: 10px;
   }
 
   .tip {
@@ -281,15 +377,26 @@
     margin: 20px 0;
   }
 
-  .name-input {
-    width: 30%;
-  }
-
-  .el-icon-arrow-right {
-    margin-right: 5px;
-  }
-
   .icon.is-active {
     transform: rotate(90deg);
+  }
+
+  .ms-tabs >>> .el-icon-close:before {
+    content: "";
+
+  }
+
+  .ms-btn {
+    background-color: #409EFF;
+    color: white;
+  }
+
+  .ms-btn-flot {
+    margin: 20px;
+    float: right;
+  }
+
+  .ms-tag {
+    margin-left: 20px;
   }
 </style>

@@ -10,8 +10,9 @@
         <el-table-column prop="description" :label="$t('commons.description')"/>
         <el-table-column :label="$t('commons.member')">
           <template v-slot:default="scope">
-            <el-button type="text" class="member-size" @click="cellClick(scope.row)">{{scope.row.memberSize}}
-            </el-button>
+            <el-link type="primary" class="member-size" @click="cellClick(scope.row)">
+              {{ scope.row.memberSize }}
+            </el-link>
           </template>
         </el-table-column>
         <el-table-column :label="$t('commons.operating')">
@@ -266,7 +267,14 @@
         let lastOrganizationId = this.currentUser.lastOrganizationId;
         let userRole = this.currentUser.userRoles.filter(r => r.sourceId === lastOrganizationId);
         if (userRole.length > 0) {
-          if (userRole[0].roleId === "org_admin") {
+          let isOrg_admin = false;
+          userRole.forEach(row=>{
+            if(row.roleId === "org_admin" ){
+              isOrg_admin = true;
+              return;
+            }
+          });
+          if (isOrg_admin) {
             this.result = this.$post(url, this.condition, response => {
               let data = response.data;
               this.items = data.listObject;
@@ -506,7 +514,6 @@
 
   .member-size {
     text-decoration: underline;
-    cursor: pointer;
   }
 
   .select-width {

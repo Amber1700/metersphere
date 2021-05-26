@@ -1,22 +1,10 @@
 package io.metersphere.job.sechedule;
 
-import io.metersphere.api.dto.automation.ExecuteType;
-import io.metersphere.api.dto.automation.SchedulePlanScenarioExecuteRequest;
-import io.metersphere.api.service.ApiTestCaseService;
-import io.metersphere.base.domain.*;
-import io.metersphere.commons.constants.ApiRunMode;
 import io.metersphere.commons.constants.ReportTriggerMode;
 import io.metersphere.commons.constants.ScheduleGroup;
 import io.metersphere.commons.utils.CommonBeanFactory;
-import io.metersphere.commons.utils.LogUtil;
-import io.metersphere.performance.service.PerformanceTestService;
-import io.metersphere.track.dto.TestPlanLoadCaseDTO;
-import io.metersphere.track.request.testplan.LoadCaseRequest;
-import io.metersphere.track.request.testplan.RunTestPlanRequest;
-import io.metersphere.track.service.*;
+import io.metersphere.track.service.TestPlanService;
 import org.quartz.*;
-
-import java.util.*;
 
 /**
  * 情景测试Job
@@ -29,7 +17,7 @@ public class TestPlanTestJob extends MsScheduleJob {
     private String projectID;
 
 
-//    private PerformanceTestService performanceTestService;
+    //    private PerformanceTestService performanceTestService;
 //    private TestPlanScenarioCaseService testPlanScenarioCaseService;
 //    private TestPlanApiCaseService testPlanApiCaseService;
 //    private ApiTestCaseService apiTestCaseService;
@@ -66,13 +54,12 @@ public class TestPlanTestJob extends MsScheduleJob {
         this.projectID = jobDataMap.getString("projectId");
 
 
-
         businessExecute(context);
     }
 
     @Override
     void businessExecute(JobExecutionContext context) {
-        testPlanService.run(this.resourceId,this.projectID,this.userId,ReportTriggerMode.SCHEDULE.name());
+        testPlanService.run(this.resourceId, this.projectID, this.userId, ReportTriggerMode.SCHEDULE.name());
     }
 
     public static JobKey getJobKey(String testId) {

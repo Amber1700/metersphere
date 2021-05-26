@@ -4,14 +4,17 @@ import io.metersphere.base.domain.*;
 import io.metersphere.base.mapper.LoadTestMapper;
 import io.metersphere.base.mapper.TestResourceMapper;
 import io.metersphere.base.mapper.TestResourcePoolMapper;
+import io.metersphere.commons.constants.PerformanceTestStatus;
 import io.metersphere.commons.constants.ResourcePoolTypeEnum;
 import io.metersphere.commons.exception.MSException;
 import io.metersphere.commons.utils.CommonBeanFactory;
 import io.metersphere.commons.utils.LogUtil;
 import io.metersphere.controller.request.resourcepool.QueryResourcePoolRequest;
 import io.metersphere.dto.TestResourcePoolDTO;
+import io.metersphere.dto.UpdatePoolDTO;
 import io.metersphere.i18n.Translator;
 import org.apache.commons.beanutils.BeanUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,8 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static io.metersphere.commons.constants.ResourceStatusEnum.INVALID;
-import static io.metersphere.commons.constants.ResourceStatusEnum.VALID;
+import static io.metersphere.commons.constants.ResourceStatusEnum.*;
 
 /**
  * @author dongbin
@@ -39,9 +41,9 @@ public class TestResourcePoolService {
     @Resource
     private TestResourceMapper testResourceMapper;
     @Resource
-    private LoadTestMapper loadTestMapper;
-    @Resource
     private NodeResourcePoolService nodeResourcePoolService;
+    @Resource
+    private LoadTestMapper loadTestMapper;
 
     public TestResourcePoolDTO addTestResourcePool(TestResourcePoolDTO testResourcePool) {
         checkTestResourcePool(testResourcePool);
@@ -55,25 +57,7 @@ public class TestResourcePoolService {
     }
 
     public void deleteTestResourcePool(String testResourcePoolId) {
-        // check test is Running Starting Error
-        checkTestStatus(testResourcePoolId);
-        deleteTestResource(testResourcePoolId);
-        testResourcePoolMapper.deleteByPrimaryKey(testResourcePoolId);
-    }
-
-    public void checkTestStatus(String testResourcePoolId) {
-        LoadTestExample example = new LoadTestExample();
-        example.createCriteria()
-                .andTestResourcePoolIdEqualTo(testResourcePoolId);
-        List<LoadTest> loadTests = loadTestMapper.selectByExample(example);
-        StringBuilder loadTestNames = new StringBuilder();
-        if (loadTests.size() > 0) {
-            for (LoadTest loadTest : loadTests) {
-                loadTestNames = loadTestNames.append(loadTest.getName()).append(",");
-            }
-            String str = loadTestNames.substring(0, loadTestNames.length() - 1);
-            MSException.throwException(Translator.get("load_test") + " " + str + " " + Translator.get("test_resource_pool_is_use"));
-        }
+        updateTestResourcePoolStatus(testResourcePoolId, DELETE.name());
     }
 
     public void updateTestResourcePool(TestResourcePoolDTO testResourcePool) {
@@ -95,6 +79,7 @@ public class TestResourcePoolService {
         if (StringUtils.isNotBlank(testResourcePoolDTO.getId())) {
             criteria.andIdNotEqualTo(testResourcePoolDTO.getId());
         }
+        criteria.andStatusNotEqualTo(DELETE.name());
 
         if (testResourcePoolMapper.countByExample(example) > 0) {
             MSException.throwException(Translator.get("test_resource_pool_name_already_exists"));
@@ -109,8 +94,8 @@ public class TestResourcePoolService {
         }
         testResourcePool.setUpdateTime(System.currentTimeMillis());
         testResourcePool.setStatus(status);
-        // 禁用资源池
-        if (INVALID.name().equals(status)) {
+        // 禁用/删除 资源池
+        if (INVALID.name().equals(status) || DELETE.name().equals(status)) {
             testResourcePoolMapper.updateByPrimaryKeySelective(testResourcePool);
             return;
         }
@@ -131,6 +116,35 @@ public class TestResourcePoolService {
         }
     }
 
+    /**
+     * 禁用资源池时，检查是否有测试正在使用
+     * @param poolId 资源池ID
+     * @return UpdatePoolDTO
+     */
+    public UpdatePoolDTO checkHaveTestUsePool(String poolId) {
+        TestResourcePool testResourcePool = testResourcePoolMapper.selectByPrimaryKey(poolId);
+        if (testResourcePool == null) {
+            MSException.throwException("Resource Pool not found.");
+        }
+        UpdatePoolDTO result = new UpdatePoolDTO();
+        StringBuilder builder = new StringBuilder();
+        LoadTestExample loadTestExample = new LoadTestExample();
+        loadTestExample.createCriteria().andTestResourcePoolIdEqualTo(poolId);
+        List<LoadTest> loadTests = loadTestMapper.selectByExample(loadTestExample);
+        if (CollectionUtils.isNotEmpty(loadTests)) {
+            loadTests.forEach(loadTest -> {
+                String testStatus = loadTest.getStatus();
+                if (StringUtils.equalsAny(testStatus, PerformanceTestStatus.Starting.name(),
+                        PerformanceTestStatus.Running.name(), PerformanceTestStatus.Reporting.name())) {
+                    builder.append(loadTest.getName()).append("; ");
+                    result.setHaveTestUsePool(true);
+                }
+            });
+        }
+        result.setTestName(builder.toString());
+        return result;
+    }
+
     public List<TestResourcePoolDTO> listResourcePools(QueryResourcePoolRequest request) {
         TestResourcePoolExample example = new TestResourcePoolExample();
         TestResourcePoolExample.Criteria criteria = example.createCriteria();
@@ -140,6 +154,7 @@ public class TestResourcePoolService {
         if (StringUtils.isNotBlank(request.getStatus())) {
             criteria.andStatusEqualTo(request.getStatus());
         }
+        criteria.andStatusNotEqualTo(DELETE.name());
         example.setOrderByClause("update_time desc");
         List<TestResourcePool> testResourcePools = testResourcePoolMapper.selectByExample(example);
         List<TestResourcePoolDTO> testResourcePoolDTOS = new ArrayList<>();

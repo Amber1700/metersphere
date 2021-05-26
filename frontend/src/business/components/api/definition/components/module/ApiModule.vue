@@ -7,18 +7,22 @@
       v-loading="result.loading"
       :tree-nodes="data"
       :type="isReadOnly ? 'view' : 'edit'"
+      :allLabel="$t('commons.all_module_title')"
       @add="add"
       @edit="edit"
       @drag="drag"
       @remove="remove"
+      @refresh="list"
       @nodeSelectEvent="nodeChange"
       ref="nodeTree">
 
       <template v-slot:header>
         <api-module-header
+          :show-operator="showOperator"
           :condition="condition"
           :current-module="currentModule"
           :is-read-only="isReadOnly"
+          :moduleOptions="data"
           @exportAPI="exportAPI"
           @saveAsEdit="saveAsEdit"
           @refreshTable="$emit('refreshTable')"
@@ -37,10 +41,9 @@
   import SelectMenu from "../../../../track/common/SelectMenu";
   import {OPTIONS} from "../../model/JsonData";
   import ApiImport from "../import/ApiImport";
-  import {getCurrentProjectID} from "@/common/js/utils";
   import MsNodeTree from "../../../../track/common/NodeTree";
   import ApiModuleHeader from "./ApiModuleHeader";
-  import {buildNodePath} from "../../model/NodeTree";
+  import {buildNodePath, buildTree} from "../../model/NodeTree";
 
   export default {
     name: 'MsApiModule',
@@ -59,7 +62,6 @@
           filterText: "",
           trashEnable: false
         },
-        projectId: "",
         data: [],
         currentModule: {},
       }
@@ -71,8 +73,10 @@
           return false
         }
       },
+      showOperator: Boolean,
       planId: String,
       relevanceProjectId: String,
+      reviewId: String
     },
     computed: {
       isPlanModel() {
@@ -80,13 +84,18 @@
       },
       isRelevanceModel() {
         return this.relevanceProjectId ? true : false;
-      }
+      },
+      isReviewModel() {
+        return this.reviewId ? true : false;
+      },
+      projectId() {
+        return this.$store.state.projectId
+      },
     },
     mounted() {
-      this.projectId = getCurrentProjectID();
-      this.$emit('protocolChange', this.condition.protocol);
-      this.list();
+      this.initProtocol();
     },
+
     watch: {
       'condition.filterText'(val) {
         this.$refs.nodeTree.filter(val);
@@ -103,17 +112,27 @@
       },
       relevanceProjectId() {
         this.list();
+      },
+      reviewId() {
+        this.list();
       }
     },
     methods: {
-      list() {
+      initProtocol() {
+        this.$get('/api/module/getUserDefaultApiType/', response => {
+          this.condition.protocol = response.data;
+          this.$emit('protocolChange', this.condition.protocol);
+          this.list();
+        });
+      },
+      list(projectId) {
         let url = undefined;
         if (this.isPlanModel) {
           url = '/api/module/list/plan/' + this.planId + '/' + this.condition.protocol;
         } else if (this.isRelevanceModel) {
           url = "/api/module/list/" + this.relevanceProjectId + "/" + this.condition.protocol;
         } else {
-          url = "/api/module/list/" + this.projectId + "/" + this.condition.protocol;
+          url = "/api/module/list/" + (projectId ? projectId : this.projectId) + "/" + this.condition.protocol;
           if (!this.projectId) {
             return;
           }
@@ -121,11 +140,11 @@
         this.result = this.$get(url, response => {
           if (response.data != undefined && response.data != null) {
             this.data = response.data;
-            let moduleOptions = [];
             this.data.forEach(node => {
-              buildNodePath(node, {path: ''}, moduleOptions);
+              buildTree(node, {path: ''});
             });
-            this.$emit('setModuleOptions', moduleOptions);
+            this.$emit('setModuleOptions', this.data);
+            this.$emit('setNodeTree', this.data);
             if (this.$refs.nodeTree) {
               this.$refs.nodeTree.filter(this.condition.filterText);
             }
@@ -186,8 +205,8 @@
           this.$refs.nodeTree.append({}, dataArr[0]);
         }
       },
-      exportAPI() {
-        this.$emit('exportAPI');
+      exportAPI(type) {
+        this.$emit('exportAPI', type);
       },
       debug() {
         this.$emit('debug');
@@ -197,6 +216,7 @@
       },
       refresh() {
         this.list();
+        this.$emit('refreshTable');
       },
     }
   }

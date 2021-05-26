@@ -64,15 +64,15 @@
                       ref="caseList"/>
 
     <!-- 执行组件 -->
-    <ms-run :debug="false" :environment="api.environment" :reportId="reportId" :run-data="runData"
-            @runRefresh="runRefresh" ref="runTest"/>
+    <ms-run :debug="false" :environment="api.environment" :reportId="reportId" :run-data="runData" :env-map="envMap"
+            @runRefresh="runRefresh" @errorRefresh="errorRefresh" ref="runTest"/>
 
   </div>
 </template>
 
 <script>
   import MsApiRequestForm from "../request/http/ApiHttpRequestForm";
-  import {downloadFile, getUUID, getCurrentProjectID} from "@/common/js/utils";
+  import {getUUID} from "@/common/js/utils";
   import MsApiCaseList from "../case/ApiCaseList";
   import MsContainer from "../../../../common/components/MsContainer";
   import MsRequestResultTail from "../response/RequestResultTail";
@@ -110,6 +110,7 @@
         },
         runData: [],
         reportId: "",
+        envMap: new Map
       }
     },
     props: {apiData: {}, currentProtocol: String, syncTabs: Array, projectId: String},
@@ -133,6 +134,7 @@
           if (valid) {
             this.loading = true;
             this.api.request.name = this.api.id;
+            this.api.request.url = undefined;
             this.api.request.useEnvironment = this.api.environmentId;
             this.api.protocol = this.currentProtocol;
             this.runData = [];
@@ -142,8 +144,14 @@
           }
         })
       },
+      errorRefresh(){
+        this.loading = false;
+      },
       runRefresh(data) {
-        this.responseData = data;
+        this.responseData = {type: 'HTTP', responseResult: {responseCode: ""}, subRequestResults: []};
+        if (data) {
+          this.responseData = data;
+        }
         this.loading = false;
       },
       saveAs() {
@@ -186,11 +194,12 @@
       },
       saveAsApi() {
         let data = {};
-        data.request = JSON.stringify(this.api.request);
-        data.method = this.api.method;
+        let req = this.api.request;
+        req.id = getUUID();
+        data.request = JSON.stringify(req);
+        data.method = req.method;
+        data.path = req.path;
         data.url = this.api.url;
-        let id = getUUID();
-        data.id = id;
         data.status = this.api.status;
         data.userId = this.api.userId;
         data.description = this.api.description;

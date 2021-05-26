@@ -15,6 +15,8 @@
         </el-form-item>
 
         <el-form-item>
+          <el-button v-if="scenario" size="small" type="primary" @click="handleCommand"> {{ $t('commons.test') }}
+          </el-button>
           <el-dropdown split-button type="primary" class="ms-api-buttion" @click="handleCommand"
                        @command="handleCommand" size="small" v-if="testCase===undefined && !scenario">
             {{$t('commons.test')}}
@@ -42,7 +44,7 @@
       <el-button style="float: right;margin: 20px" type="primary" @click="handleCommand('save_as_api')"> {{$t('commons.save')}}</el-button>
     </div>
     <!-- 加载用例 -->
-    <ms-api-case-list :loaded="false" ref="caseList"/>
+    <ms-api-case-list :currentApi="debugForm" @refreshModule="refreshModule" :loaded="false" ref="caseList"/>
   </div>
 </template>
 
@@ -50,7 +52,7 @@
   import MsApiRequestForm from "../request/http/ApiHttpRequestForm";
   import MsResponseResult from "../response/ResponseResult";
   import MsRequestMetric from "../response/RequestMetric";
-  import {getUUID, getCurrentUser} from "@/common/js/utils";
+  import {getCurrentUser, getUUID} from "@/common/js/utils";
   import MsResponseText from "../response/ResponseText";
   import MsRun from "../Run";
   import {createComponent} from "../jmeter/components";
@@ -62,7 +64,16 @@
 
   export default {
     name: "ApiConfig",
-    components: {MsRequestResultTail, MsResponseResult, MsApiRequestForm, MsRequestMetric, MsResponseText, MsRun, MsJmxStep, MsApiCaseList},
+    components: {
+      MsRequestResultTail,
+      MsResponseResult,
+      MsApiRequestForm,
+      MsRequestMetric,
+      MsResponseText,
+      MsRun,
+      MsJmxStep,
+      MsApiCaseList
+    },
     props: {
       currentProtocol: String,
       testCase: {},
@@ -155,6 +166,9 @@
           }
         })
       },
+      refreshModule() {
+        this.$emit('refreshModule');
+      },
       runRefresh(data) {
         this.responseData = data;
         this.loading = false;
@@ -209,7 +223,6 @@
         }
 
       },
-
       getURL(urlStr) {
         try {
           let url = new URL(urlStr);

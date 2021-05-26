@@ -1,13 +1,16 @@
 package io.metersphere.service;
 
-import io.metersphere.base.domain.SystemParameter;
-import io.metersphere.base.domain.SystemParameterExample;
+import io.metersphere.api.service.ApiTestEnvironmentService;
+import io.metersphere.base.domain.*;
+import io.metersphere.base.mapper.SystemHeaderMapper;
 import io.metersphere.base.mapper.SystemParameterMapper;
+import io.metersphere.base.mapper.UserHeaderMapper;
 import io.metersphere.base.mapper.ext.ExtSystemParameterMapper;
 import io.metersphere.commons.constants.ParamConstants;
 import io.metersphere.commons.exception.MSException;
 import io.metersphere.commons.utils.EncryptUtils;
 import io.metersphere.commons.utils.LogUtil;
+import io.metersphere.controller.request.HeaderRequest;
 import io.metersphere.dto.BaseSystemConfigDTO;
 import io.metersphere.i18n.Translator;
 import io.metersphere.ldap.domain.LdapInfo;
@@ -23,17 +26,25 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.annotation.Resource;
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Properties;
+import java.util.UUID;
 
 
 @Service
 @Transactional(rollbackFor = Exception.class)
 public class SystemParameterService {
-
+    @Resource
+    private UserHeaderMapper userHeaderMapper;
     @Resource
     private SystemParameterMapper systemParameterMapper;
     @Resource
     private ExtSystemParameterMapper extSystemParameterMapper;
+    @Resource
+    private SystemHeaderMapper systemHeaderMapper;
+    @Resource
+    private ApiTestEnvironmentService apiTestEnvironmentService;
 
     public String searchEmail() {
         return extSystemParameterMapper.email();
@@ -106,13 +117,13 @@ public class SystemParameterService {
             LogUtil.error(e.getMessage(), e);
             MSException.throwException(Translator.get("connection_failed"));
         }
-        if(!StringUtils.isBlank(recipients)){
+        if (!StringUtils.isBlank(recipients)) {
             MimeMessage mimeMessage = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = null;
             try {
                 helper = new MimeMessageHelper(mimeMessage, true);
                 helper.setFrom(javaMailSender.getUsername());
-                helper.setSubject("MeterSphere测试邮件 " );
+                helper.setSubject("MeterSphere测试邮件 ");
                 helper.setText("这是一封测试邮件，邮件发送成功", true);
                 helper.setTo(recipients);
                 javaMailSender.send(mimeMessage);
@@ -131,10 +142,10 @@ public class SystemParameterService {
 
     public MailInfo mailInfo(String type) {
         List<SystemParameter> paramList = this.getParamList(type);
-        MailInfo mailInfo=new MailInfo ();
+        MailInfo mailInfo = new MailInfo();
         if (!CollectionUtils.isEmpty(paramList)) {
             for (SystemParameter param : paramList) {
-                if (StringUtils.equals(param.getParamKey(),ParamConstants.MAIL.SERVER.getValue() )) {
+                if (StringUtils.equals(param.getParamKey(), ParamConstants.MAIL.SERVER.getValue())) {
                     mailInfo.setHost(param.getParamValue());
                 } else if (StringUtils.equals(param.getParamKey(), ParamConstants.MAIL.PORT.getValue())) {
                     mailInfo.setPort(param.getParamValue());
@@ -198,10 +209,15 @@ public class SystemParameterService {
         return ldap;
     }
 
+
+    /**
+     * @param key System Param
+     * @return 系统key对应的值 ｜ ""
+     */
     public String getValue(String key) {
         SystemParameter param = systemParameterMapper.selectByPrimaryKey(key);
-        if (param == null) {
-            return null;
+        if (param == null || StringUtils.isBlank(param.getParamValue())) {
+            return "";
         }
         return param.getParamValue();
     }
@@ -214,6 +230,9 @@ public class SystemParameterService {
                 if (StringUtils.equals(param.getParamKey(), ParamConstants.BASE.URL.getValue())) {
                     baseSystemConfigDTO.setUrl(param.getParamValue());
                 }
+                if (StringUtils.equals(param.getParamKey(), ParamConstants.BASE.CONCURRENCY.getValue())) {
+                    baseSystemConfigDTO.setConcurrency(param.getParamValue());
+                }
             }
         }
         return baseSystemConfigDTO;
@@ -221,6 +240,7 @@ public class SystemParameterService {
 
     public void saveBaseInfo(List<SystemParameter> parameters) {
         SystemParameterExample example = new SystemParameterExample();
+
         parameters.forEach(param -> {
             // 去掉路径最后的 /
             param.setParamValue(StringUtils.removeEnd(param.getParamValue(), "/"));
@@ -231,6 +251,40 @@ public class SystemParameterService {
                 systemParameterMapper.insert(param);
             }
             example.clear();
+
+            if (StringUtils.equals(param.getParamKey(), "base.url")) {
+                apiTestEnvironmentService.checkMockEvnInfoByBaseUrl(param.getParamValue());
+            }
         });
+    }
+
+    //保存表头
+    public void saveHeader(UserHeader userHeader) {
+        UserHeaderExample example = new UserHeaderExample();
+        example.createCriteria().andUserIdEqualTo(userHeader.getUserId()).andTypeEqualTo(userHeader.getType());
+        if (userHeaderMapper.countByExample(example) > 0) {
+            userHeaderMapper.deleteByExample(example);
+            userHeader.setId(UUID.randomUUID().toString());
+            userHeaderMapper.insert(userHeader);
+        } else {
+            userHeader.setId(UUID.randomUUID().toString());
+            userHeaderMapper.insert(userHeader);
+        }
+        example.clear();
+    }
+
+    //默认表头
+    public SystemHeader getHeader(String type) {
+        return systemHeaderMapper.selectByPrimaryKey(type);
+    }
+
+    public UserHeader queryUserHeader(HeaderRequest headerRequest) {
+        UserHeaderExample example = new UserHeaderExample();
+        example.createCriteria().andUserIdEqualTo(headerRequest.getUserId()).andTypeEqualTo(headerRequest.getType());
+        List<UserHeader> list = userHeaderMapper.selectByExample(example);
+        if (list.size() > 0) {
+            return list.get(0);
+        }
+        return null;
     }
 }

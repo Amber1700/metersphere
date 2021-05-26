@@ -7,12 +7,16 @@ import java.util.List;
 
 @Data
 public class RequestResult {
+    // 请求ID
+    private String id;
 
     private String name;
 
     private String url;
 
     private String method;
+
+    private String scenario;
 
     private long requestSize;
 

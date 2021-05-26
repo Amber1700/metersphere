@@ -1393,6 +1393,146 @@ public class ApiScenarioExample {
             addCriterion("num not between", value1, value2, "num");
             return (Criteria) this;
         }
+
+        public Criteria andOriginalStateIsNull() {
+            addCriterion("original_state is null");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateIsNotNull() {
+            addCriterion("original_state is not null");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateEqualTo(String value) {
+            addCriterion("original_state =", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateNotEqualTo(String value) {
+            addCriterion("original_state <>", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateGreaterThan(String value) {
+            addCriterion("original_state >", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateGreaterThanOrEqualTo(String value) {
+            addCriterion("original_state >=", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateLessThan(String value) {
+            addCriterion("original_state <", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateLessThanOrEqualTo(String value) {
+            addCriterion("original_state <=", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateLike(String value) {
+            addCriterion("original_state like", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateNotLike(String value) {
+            addCriterion("original_state not like", value, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateIn(List<String> values) {
+            addCriterion("original_state in", values, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateNotIn(List<String> values) {
+            addCriterion("original_state not in", values, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateBetween(String value1, String value2) {
+            addCriterion("original_state between", value1, value2, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andOriginalStateNotBetween(String value1, String value2) {
+            addCriterion("original_state not between", value1, value2, "originalState");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumIsNull() {
+            addCriterion("custom_num is null");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumIsNotNull() {
+            addCriterion("custom_num is not null");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumEqualTo(String value) {
+            addCriterion("custom_num =", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumNotEqualTo(String value) {
+            addCriterion("custom_num <>", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumGreaterThan(String value) {
+            addCriterion("custom_num >", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumGreaterThanOrEqualTo(String value) {
+            addCriterion("custom_num >=", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumLessThan(String value) {
+            addCriterion("custom_num <", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumLessThanOrEqualTo(String value) {
+            addCriterion("custom_num <=", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumLike(String value) {
+            addCriterion("custom_num like", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumNotLike(String value) {
+            addCriterion("custom_num not like", value, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumIn(List<String> values) {
+            addCriterion("custom_num in", values, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumNotIn(List<String> values) {
+            addCriterion("custom_num not in", values, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumBetween(String value1, String value2) {
+            addCriterion("custom_num between", value1, value2, "customNum");
+            return (Criteria) this;
+        }
+
+        public Criteria andCustomNumNotBetween(String value1, String value2) {
+            addCriterion("custom_num not between", value1, value2, "customNum");
+            return (Criteria) this;
+        }
     }
 
     public static class Criteria extends GeneratedCriteria {

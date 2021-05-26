@@ -7,7 +7,9 @@
       <el-dropdown-menu slot="dropdown">
         <el-dropdown-item command="ref">{{ $t('api_test.automation.view_ref') }}</el-dropdown-item>
         <el-dropdown-item command="schedule" v-tester>{{ $t('api_test.automation.schedule') }}</el-dropdown-item>
-        <el-dropdown-item command="create_performance" v-tester>{{ $t('api_test.create_performance_test') }}</el-dropdown-item>
+        <el-dropdown-item command="create_performance" v-tester v-modules="['performance']">
+          {{ $t('api_test.create_performance_test') }}
+        </el-dropdown-item>
       </el-dropdown-menu>
     </el-dropdown>
     <ms-reference-view @openScenario="openScenario" ref="viewRef"/>
@@ -48,13 +50,16 @@
         let scenarioIds = [];
         scenarioIds.push(row.id);
         run.projectId = getCurrentProjectID();
-        run.scenarioIds = scenarioIds;
+        run.ids = scenarioIds;
         run.id = getUUID();
         run.name = row.name;
         this.$post(url, run, response => {
           let jmxObj = {};
           jmxObj.name = response.data.name;
           jmxObj.xml = response.data.xml;
+          jmxObj.attachFiles = response.data.attachFiles;
+          jmxObj.attachByteFiles = response.data.attachByteFiles;
+          jmxObj.scenarioId = row.id;
           this.$store.commit('setTest', {
             name: row.name,
             jmx: jmxObj

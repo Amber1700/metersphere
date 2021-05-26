@@ -5,9 +5,6 @@ import com.alibaba.fastjson.annotation.JSONField;
 import com.alibaba.fastjson.annotation.JSONType;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.metersphere.api.dto.definition.request.assertions.MsAssertions;
 import io.metersphere.api.dto.definition.request.auth.MsAuthManager;
 import io.metersphere.api.dto.definition.request.configurations.MsHeaderManager;
@@ -22,16 +19,19 @@ import io.metersphere.api.dto.definition.request.sampler.MsHTTPSamplerProxy;
 import io.metersphere.api.dto.definition.request.sampler.MsJDBCSampler;
 import io.metersphere.api.dto.definition.request.sampler.MsTCPSampler;
 import io.metersphere.api.dto.definition.request.timer.MsConstantTimer;
+import io.metersphere.api.dto.definition.request.unknown.MsJmeterElement;
 import io.metersphere.api.dto.definition.request.variable.ScenarioVariable;
+import io.metersphere.api.dto.mockconfig.MockConfigStaticData;
 import io.metersphere.api.dto.scenario.KeyValue;
 import io.metersphere.api.dto.scenario.environment.EnvironmentConfig;
-import io.metersphere.api.service.ApiDefinitionService;
 import io.metersphere.api.service.ApiTestEnvironmentService;
-import io.metersphere.base.domain.ApiDefinitionWithBLOBs;
 import io.metersphere.base.domain.ApiTestEnvironmentWithBLOBs;
+import io.metersphere.commons.constants.DelimiterConstants;
 import io.metersphere.commons.constants.LoopConstants;
 import io.metersphere.commons.constants.MsTestElementConstants;
+import io.metersphere.commons.exception.MSException;
 import io.metersphere.commons.utils.CommonBeanFactory;
+import io.metersphere.commons.utils.FileUtils;
 import io.metersphere.commons.utils.LogUtil;
 import lombok.Data;
 import org.apache.commons.collections.CollectionUtils;
@@ -40,15 +40,18 @@ import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.config.CSVDataSet;
 import org.apache.jmeter.config.RandomVariableConfig;
 import org.apache.jmeter.modifiers.CounterConfig;
-import org.apache.jmeter.protocol.http.control.AuthManager;
 import org.apache.jmeter.save.SaveService;
 import org.apache.jmeter.testelement.TestElement;
 import org.apache.jorphan.collections.HashTree;
 import org.apache.jorphan.collections.ListedHashTree;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.net.URL;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type")
@@ -70,11 +73,12 @@ import java.util.stream.Collectors;
         @JsonSubTypes.Type(value = MsIfController.class, name = "IfController"),
         @JsonSubTypes.Type(value = MsScenario.class, name = "scenario"),
         @JsonSubTypes.Type(value = MsLoopController.class, name = "LoopController"),
+        @JsonSubTypes.Type(value = MsJmeterElement.class, name = "JmeterElement"),
 
 })
 @JSONType(seeAlso = {MsHTTPSamplerProxy.class, MsHeaderManager.class, MsJSR223Processor.class, MsJSR223PostProcessor.class,
-        MsJSR223PreProcessor.class, MsTestPlan.class, MsThreadGroup.class, AuthManager.class, MsAssertions.class,
-        MsExtract.class, MsTCPSampler.class, MsDubboSampler.class, MsJDBCSampler.class, MsConstantTimer.class, MsIfController.class, MsScenario.class, MsLoopController.class}, typeKey = "type")
+        MsJSR223PreProcessor.class, MsTestPlan.class, MsThreadGroup.class, MsAuthManager.class, MsAssertions.class,
+        MsExtract.class, MsTCPSampler.class, MsDubboSampler.class, MsJDBCSampler.class, MsConstantTimer.class, MsIfController.class, MsScenario.class, MsLoopController.class, MsJmeterElement.class}, typeKey = "type")
 @Data
 public abstract class MsTestElement {
     private String type;
@@ -98,15 +102,25 @@ public abstract class MsTestElement {
     private String refType;
     @JSONField(ordinal = 10)
     private LinkedList<MsTestElement> hashTree;
+    @JSONField(ordinal = 11)
+    private boolean customizeReq;
+    @JSONField(ordinal = 12)
+    private String projectId;
+    @JSONField(ordinal = 13)
+    private boolean isMockEnvironment;
 
     private MsTestElement parent;
 
-    private static final String BODY_FILE_DIR = "/opt/metersphere/data/body";
+    private static final String BODY_FILE_DIR = FileUtils.BODY_FILE_DIR;
 
-    // 公共环境逐层传递，如果自身有环境 以自身引用环境为准否则以公共环境作为请求环境
+    /**
+     * todo 公共环境逐层传递，如果自身有环境 以自身引用环境为准否则以公共环境作为请求环境
+     */
     public void toHashTree(HashTree tree, List<MsTestElement> hashTree, ParameterConfig config) {
-        for (MsTestElement el : hashTree) {
-            el.toHashTree(tree, el.hashTree, config);
+        if (CollectionUtils.isNotEmpty(hashTree)) {
+            for (MsTestElement el : hashTree) {
+                el.toHashTree(tree, el.hashTree, config);
+            }
         }
     }
 
@@ -133,53 +147,42 @@ public abstract class MsTestElement {
         return jmeterTestPlanHashTree;
     }
 
-    public HashTree generateHashTree() {
-        HashTree jmeterTestPlanHashTree = new ListedHashTree();
-        this.toHashTree(jmeterTestPlanHashTree, this.hashTree, new ParameterConfig());
-        return jmeterTestPlanHashTree;
-    }
-
-    public void getRefElement(MsTestElement element) {
-        try {
-            ApiDefinitionService apiDefinitionService = CommonBeanFactory.getBean(ApiDefinitionService.class);
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            ApiDefinitionWithBLOBs apiDefinition = apiDefinitionService.getBLOBs(this.getId());
-            if (apiDefinition != null) {
-                element = mapper.readValue(apiDefinition.getRequest(), new TypeReference<MsTestElement>() {
-                });
-                hashTree.add(element);
-            }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-    }
-
     public Arguments addArguments(ParameterConfig config) {
-        Arguments arguments = new Arguments();
-        if (config != null && config.getConfig() != null && config.getConfig().getCommonConfig() != null
-                && CollectionUtils.isNotEmpty(config.getConfig().getCommonConfig().getVariables())) {
+        if (config.isEffective(this.getProjectId()) && config.getConfig().get(this.getProjectId()).getCommonConfig() != null
+                && CollectionUtils.isNotEmpty(config.getConfig().get(this.getProjectId()).getCommonConfig().getVariables())) {
+            Arguments arguments = new Arguments();
             arguments.setEnabled(true);
-            arguments.setName(name + "Variables");
+            arguments.setName(StringUtils.isNoneBlank(this.getName()) ? this.getName() : "Arguments");
             arguments.setProperty(TestElement.TEST_CLASS, Arguments.class.getName());
             arguments.setProperty(TestElement.GUI_CLASS, SaveService.aliasToClass("ArgumentsPanel"));
-            config.getConfig().getCommonConfig().getVariables().stream().filter(KeyValue::isValid).filter(KeyValue::isEnable).forEach(keyValue ->
+            config.getConfig().get(this.getProjectId()).getCommonConfig().getVariables().stream().filter(KeyValue::isValid).filter(KeyValue::isEnable).forEach(keyValue ->
                     arguments.addArgument(keyValue.getName(), keyValue.getValue(), "=")
             );
-        }
-        return arguments;
-    }
-
-    protected EnvironmentConfig getEnvironmentConfig(String environmentId) {
-        ApiTestEnvironmentService environmentService = CommonBeanFactory.getBean(ApiTestEnvironmentService.class);
-        ApiTestEnvironmentWithBLOBs environment = environmentService.get(environmentId);
-        if (environment != null && environment.getConfig() != null) {
-            return JSONObject.parseObject(environment.getConfig(), EnvironmentConfig.class);
+            if (arguments.getArguments().size() > 0) {
+                return arguments;
+            }
         }
         return null;
     }
 
-    protected void addCsvDataSet(HashTree tree, List<ScenarioVariable> variables) {
+    protected Map<String, EnvironmentConfig> getEnvironmentConfig(String environmentId) {
+        ApiTestEnvironmentService environmentService = CommonBeanFactory.getBean(ApiTestEnvironmentService.class);
+        ApiTestEnvironmentWithBLOBs environment = environmentService.get(environmentId);
+        if (environment != null && environment.getConfig() != null) {
+            if (StringUtils.equals(environment.getName(), MockConfigStaticData.MOCK_EVN_NAME)) {
+                isMockEnvironment = true;
+            }
+            // 单独接口执行
+            Map<String, EnvironmentConfig> map = new HashMap<>();
+            map.put(this.getProjectId(), JSONObject.parseObject(environment.getConfig(), EnvironmentConfig.class));
+            return map;
+        }
+
+
+        return null;
+    }
+
+    protected void addCsvDataSet(HashTree tree, List<ScenarioVariable> variables, ParameterConfig config, String shareMode) {
         if (CollectionUtils.isNotEmpty(variables)) {
             List<ScenarioVariable> list = variables.stream().filter(ScenarioVariable::isCSVValid).collect(Collectors.toList());
             if (CollectionUtils.isNotEmpty(list)) {
@@ -188,15 +191,19 @@ public abstract class MsTestElement {
                     csvDataSet.setEnabled(true);
                     csvDataSet.setProperty(TestElement.TEST_CLASS, CSVDataSet.class.getName());
                     csvDataSet.setProperty(TestElement.GUI_CLASS, SaveService.aliasToClass("TestBeanGUI"));
-                    csvDataSet.setName(item.getName());
-                    csvDataSet.setProperty("fileEncoding", item.getEncoding());
-                    csvDataSet.setProperty("variableNames", item.getName());
+                    csvDataSet.setName(StringUtils.isEmpty(item.getName()) ? "CSVDataSet" : item.getName());
+                    csvDataSet.setProperty("fileEncoding", StringUtils.isEmpty(item.getEncoding()) ? "UTF-8" : item.getEncoding());
                     if (CollectionUtils.isNotEmpty(item.getFiles())) {
+                        if (!config.isOperating() && !new File(BODY_FILE_DIR + "/" + item.getFiles().get(0).getId() + "_" + item.getFiles().get(0).getName()).exists()) {
+                            MSException.throwException(StringUtils.isEmpty(item.getName()) ? "CSVDataSet" : item.getName() + "：[ CSV文件不存在 ]");
+                        }
                         csvDataSet.setProperty("filename", BODY_FILE_DIR + "/" + item.getFiles().get(0).getId() + "_" + item.getFiles().get(0).getName());
                     }
                     csvDataSet.setIgnoreFirstLine(false);
+                    csvDataSet.setProperty("shareMode", shareMode);
+                    csvDataSet.setProperty("recycle", true);
                     csvDataSet.setProperty("delimiter", item.getDelimiter());
-                    csvDataSet.setComment(item.getDescription());
+                    csvDataSet.setComment(StringUtils.isEmpty(item.getDescription()) ? "" : item.getDescription());
                     tree.add(csvDataSet);
                 });
             }
@@ -218,7 +225,7 @@ public abstract class MsTestElement {
                     counterConfig.setVarName(item.getName());
                     counterConfig.setIncrement(item.getIncrement());
                     counterConfig.setFormat(item.getValue());
-                    counterConfig.setComment(item.getDescription());
+                    counterConfig.setComment(StringUtils.isEmpty(item.getDescription()) ? "" : item.getDescription());
                     tree.add(counterConfig);
                 });
             }
@@ -239,46 +246,66 @@ public abstract class MsTestElement {
                     randomVariableConfig.setProperty("outputFormat", item.getValue());
                     randomVariableConfig.setProperty("minimumValue", item.getMinNumber());
                     randomVariableConfig.setProperty("maximumValue", item.getMaxNumber());
-                    randomVariableConfig.setComment(item.getDescription());
+                    randomVariableConfig.setComment(StringUtils.isEmpty(item.getDescription()) ? "" : item.getDescription());
                     tree.add(randomVariableConfig);
                 });
             }
         }
     }
 
-    public MsTestElement getRootParent(MsTestElement element) {
+    public String getFullPath(MsTestElement element, String path) {
         if (element.getParent() == null) {
-            return element;
+            return path;
         }
-        if (MsTestElementConstants.LoopController.name().equals(element.getType())) {
-            return element;
-        }
-        return getRootParent(element.getParent());
+        path = StringUtils.isEmpty(element.getName()) ? element.getType() : element.getName() + DelimiterConstants.STEP_DELIMITER.toString() + path;
+        return getFullPath(element.getParent(), path);
     }
 
-    protected String getParentName(MsTestElement parent, ParameterConfig config) {
+    public void getScenarioSet(MsTestElement element, List<String> id_names) {
+        if (StringUtils.equals(element.getType(), "scenario")) {
+            id_names.add(element.getResourceId() + "_" + element.getName());
+        }
+        if (element.getParent() == null) {
+            return;
+        }
+        getScenarioSet(element.getParent(), id_names);
+    }
+
+    protected String getParentName(MsTestElement parent) {
         if (parent != null) {
             if (MsTestElementConstants.LoopController.name().equals(parent.getType())) {
                 MsLoopController loopController = (MsLoopController) parent;
                 if (StringUtils.equals(loopController.getLoopType(), LoopConstants.WHILE.name()) && loopController.getWhileController() != null) {
-                    return "While 循环-" + "${LoopCounterConfigXXX}";
+                    return "While 循环-" + "${MS_LOOP_CONTROLLER_CONFIG}";
                 }
                 if (StringUtils.equals(loopController.getLoopType(), LoopConstants.FOREACH.name()) && loopController.getForEachController() != null) {
-                    return "ForEach 循环-" + "${LoopCounterConfigXXX}";
+                    return "ForEach 循环-" + "${MS_LOOP_CONTROLLER_CONFIG}";
                 }
                 if (StringUtils.equals(loopController.getLoopType(), LoopConstants.LOOP_COUNT.name()) && loopController.getCountController() != null) {
-                    return "次数循环-" + "${LoopCounterConfigXXX}";
+                    return "次数循环-" + "${MS_LOOP_CONTROLLER_CONFIG}";
                 }
             }
-            return parent.getName();
-        } else if (config != null && StringUtils.isNotEmpty(config.getStep())) {
-            if (MsTestElementConstants.SCENARIO.name().equals(config.getStepType())) {
-                return config.getStep();
-            } else {
-                return config.getStep() + "-" + "${LoopCounterConfigXXX}";
-            }
+            // 获取全路径以备后面使用
+            String fullPath = getFullPath(parent, new String());
+            return fullPath + DelimiterConstants.SEPARATOR.toString() + parent.getName();
         }
         return "";
+    }
+
+    public boolean isURL(String str) {
+        try {
+            if (StringUtils.isEmpty(str)) {
+                return false;
+            }
+            new URL(str);
+            return true;
+        } catch (Exception e) {
+            // 支持包含变量的url
+            if (str.matches("^(http|https|ftp)://.*$") && str.matches(".*://\\$\\{.*$")) {
+                return true;
+            }
+            return false;
+        }
     }
 }
 

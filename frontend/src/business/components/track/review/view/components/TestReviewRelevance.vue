@@ -94,31 +94,32 @@
 
 <script>
 
-  import NodeTree from "../../../common/NodeTree";
-  import MsDialogFooter from "../../../../common/components/MsDialogFooter";
-  import PriorityTableItem from "../../../common/tableItems/planview/PriorityTableItem";
-  import TypeTableItem from "../../../common/tableItems/planview/TypeTableItem";
-  import MsTableSearchBar from "../../../../common/components/MsTableSearchBar";
-  import MsTableAdvSearchBar from "../../../../common/components/search/MsTableAdvSearchBar";
-  import MsTableHeader from "../../../../common/components/MsTableHeader";
-  import SwitchProject from "../../../case/components/SwitchProject";
-  import {TEST_CASE_CONFIGS} from "../../../../common/components/search/search-components";
-  import {_filter} from "../../../../../../common/js/utils";
-  import ReviewStatus from "@/business/components/track/case/components/ReviewStatus";
-  import elTableInfiniteScroll from 'el-table-infinite-scroll';
-  import SelectMenu from "../../../common/SelectMenu";
+import NodeTree from "../../../common/NodeTree";
+import MsDialogFooter from "../../../../common/components/MsDialogFooter";
+import PriorityTableItem from "../../../common/tableItems/planview/PriorityTableItem";
+import TypeTableItem from "../../../common/tableItems/planview/TypeTableItem";
+import MsTableSearchBar from "../../../../common/components/MsTableSearchBar";
+import MsTableAdvSearchBar from "../../../../common/components/search/MsTableAdvSearchBar";
+import MsTableHeader from "../../../../common/components/MsTableHeader";
+import SwitchProject from "../../../case/components/SwitchProject";
+import {TEST_CASE_CONFIGS} from "../../../../common/components/search/search-components";
+import ReviewStatus from "@/business/components/track/case/components/ReviewStatus";
+import elTableInfiniteScroll from 'el-table-infinite-scroll';
+import SelectMenu from "../../../common/SelectMenu";
+import {_filter} from "@/common/js/tableUtils";
 
-  export default {
-    name: "TestReviewRelevance",
-    components: {
-      SelectMenu,
-      NodeTree,
-      MsDialogFooter,
-      PriorityTableItem,
-      TypeTableItem,
-      MsTableSearchBar,
-      MsTableAdvSearchBar,
-      MsTableHeader,
+
+export default {
+  name: "TestReviewRelevance",
+  components: {
+    SelectMenu,
+    NodeTree,
+    MsDialogFooter,
+    PriorityTableItem,
+    TypeTableItem,
+    MsTableSearchBar,
+    MsTableAdvSearchBar,
+    MsTableHeader,
       SwitchProject,
       ReviewStatus
 
@@ -128,6 +129,7 @@
     },
     data() {
       return {
+        checked: true,
         result: {},
         currentProject: {},
         dialogFormVisible: false,
@@ -159,9 +161,9 @@
           {text: this.$t('commons.api'), value: 'api'}
         ],
         statusFilters: [
-          {text: this.$t('test_track.case.status_prepare'), value: 'Prepare'},
-          {text: this.$t('test_track.case.status_pass'), value: 'Pass'},
-          {text: this.$t('test_track.case.status_un_pass'), value: 'UnPass'},
+          {text: this.$t('test_track.review.prepare'), value: 'Prepare'},
+          {text: this.$t('test_track.review.pass'), value: 'Pass'},
+          {text: this.$t('test_track.review.un_pass'), value: 'UnPass'},
         ],
       };
     },
@@ -197,6 +199,9 @@
         param.reviewId = this.reviewId;
         param.testCaseIds = [...this.selectIds];
         param.request = this.condition;
+/*
+        param.checked = this.checked;
+*/
         // 选择全选则全部加入到评审，无论是否加载完全部
         if (this.testReviews.length === param.testCaseIds.length) {
           param.testCaseIds = ['all'];
@@ -308,10 +313,17 @@
           this.$post("/test/case/review/projects", {reviewId: this.reviewId}, res => {
             let data = res.data;
             if (data) {
-              this.currentProject = data[0];
               this.projects = data;
-              this.projectId = data[0].id;
-              this.projectName = data[0].name;
+              const index = data.findIndex(d => d.id === this.$store.state.projectId);
+              if (index !== -1) {
+                this.projectId = data[index].id;
+                this.projectName = data[index].name;
+                this.currentProject = data[index];
+              } else {
+                this.projectId = data[0].id;
+                this.projectName = data[0].name;
+                this.currentProject = data[0];
+              }
             }
           })
         }

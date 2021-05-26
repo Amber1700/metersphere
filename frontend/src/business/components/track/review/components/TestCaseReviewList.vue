@@ -14,62 +14,93 @@
       @filter-change="filter"
       @sort-change="sort"
       @row-click="intoReview">
-      <el-table-column
-        prop="name"
-        :label="$t('test_track.review.review_name')"
-        show-overflow-tooltip>
-      </el-table-column>
-      <el-table-column
-        prop="reviewer"
-        :label="$t('test_track.review.reviewer')"
-        show-overflow-tooltip>
-      </el-table-column>
-      <el-table-column
-        prop="projectName"
-        :label="$t('test_track.review.review_project')"
-        show-overflow-tooltip>
-      </el-table-column>
-      <el-table-column
-        prop="creatorName"
-        :label="$t('test_track.review.review_creator')"
-        show-overflow-tooltip>
-      </el-table-column>
-      <el-table-column
-        prop="status"
-        column-key="status"
-        :label="$t('test_track.review.review_status')"
-        show-overflow-tooltip>
-        <template v-slot:default="scope">
+      <template v-for="(item, index) in tableLabel">
+        <el-table-column
+          v-if="item.id=='name'"
+          prop="name"
+          :label="$t('test_track.review.review_name')"
+          show-overflow-tooltip
+          :key="index">
+        </el-table-column>
+        <el-table-column
+          v-if="item.id=='reviewer'"
+          prop="reviewer"
+          :label="$t('test_track.review.reviewer')"
+          show-overflow-tooltip
+          :key="index">
+        </el-table-column>
+        <el-table-column
+          v-if="item.id=='projectName'"
+          prop="projectName"
+          :label="$t('test_track.review.review_project')"
+          show-overflow-tooltip
+          :key="index">
+        </el-table-column>
+        <el-table-column
+          v-if="item.id=='creatorName'"
+          prop="creatorName"
+          :label="$t('test_track.review.review_creator')"
+          show-overflow-tooltip
+          :key="index"
+        >
+        </el-table-column>
+        <el-table-column
+          v-if="item.id=='status'"
+          prop="status"
+          column-key="status"
+          :label="$t('test_track.review.review_status')"
+          show-overflow-tooltip
+          :key="index"
+        >
+          <template v-slot:default="scope">
           <span class="el-dropdown-link">
             <plan-status-table-item :value="scope.row.status"/>
           </span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="createTime"
-        :label="$t('commons.create_time')"
-        show-overflow-tooltip>
-        <template v-slot:default="scope">
-          <span>{{ scope.row.createTime | timestampFormatDate }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="endTime"
-        :label="$t('test_track.review.end_time')"
-        show-overflow-tooltip>
-        <template v-slot:default="scope">
-          <span>{{ scope.row.endTime | timestampFormatDate }}</span>
-        </template>
-      </el-table-column>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="item.id == 'tags'" prop="tags"
+                         :label="$t('api_test.automation.tag')" :key="index">
+          <template v-slot:default="scope">
+            <ms-tag v-for="(itemName,index)  in scope.row.tags" :key="index" type="success" effect="plain"
+                    :content="itemName" style="margin-left: 0px; margin-right: 2px"></ms-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="item.id=='createTime'"
+          prop="createTime"
+          :label="$t('commons.create_time')"
+          show-overflow-tooltip
+          :key="index"
+        >
+          <template v-slot:default="scope">
+            <span>{{ scope.row.createTime | timestampFormatDate }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="item.id=='endTime'"
+          prop="endTime"
+          :label="$t('test_track.review.end_time')"
+          show-overflow-tooltip
+          :key="index">
+          <template v-slot:default="scope">
+            <span>{{ scope.row.endTime | timestampFormatDate }}</span>
+          </template>
+        </el-table-column>
+      </template>
       <el-table-column
         min-width="100"
         :label="$t('commons.operating')">
+        <template slot="header">
+          <header-label-operate @exec="customHeader"/>
+        </template>
         <template v-slot:default="scope">
           <ms-table-operator :is-tester-permission="true" @editClick="handleEdit(scope.row)"
                              @deleteClick="handleDelete(scope.row)">
           </ms-table-operator>
         </template>
       </el-table-column>
+      <header-custom ref="headerCustom" :initTableData="initTableData" :optionalFields=headerItems
+                     :type=type></header-custom>
     </el-table>
 
     <ms-table-pagination :change="initTableData" :current-page.sync="currentPage" :page-size.sync="pageSize"
@@ -88,17 +119,23 @@ import MsTableHeader from "../../../common/components/MsTableHeader";
 import MsCreateBox from "../../../settings/CreateBox";
 import MsTablePagination from "../../../common/pagination/TablePagination";
 import {
-  _filter,
-  _sort,
   checkoutTestManagerOrTestUser,
-  getCurrentProjectID,
   getCurrentWorkspaceId
 } from "../../../../../common/js/utils";
+import {_filter, _sort, getLabel} from "@/common/js/tableUtils";
 import PlanStatusTableItem from "../../common/tableItems/plan/PlanStatusTableItem";
+import {Test_Case_Review} from "@/business/components/common/model/JsonData";
+import {TEST_CASE_LIST, TEST_CASE_REVIEW_LIST} from "@/common/js/constants";
+import HeaderCustom from "@/business/components/common/head/HeaderCustom";
+import HeaderLabelOperate from "@/business/components/common/head/HeaderLabelOperate";
+import MsTag from "@/business/components/common/components/MsTag";
 
 export default {
   name: "TestCaseReviewList",
   components: {
+    MsTag,
+    HeaderLabelOperate,
+    HeaderCustom,
     MsDeleteConfirm,
     MsTableOperator,
     MsTableOperatorButton,
@@ -110,6 +147,9 @@ export default {
   },
   data() {
     return {
+      type: TEST_CASE_REVIEW_LIST,
+      headerItems: Test_Case_Review,
+      tableLabel: [],
       result: {},
       condition: {},
       tableData: [],
@@ -135,18 +175,32 @@ export default {
     this.isTestManagerOrTestUser = checkoutTestManagerOrTestUser();
     this.initTableData();
   },
+  computed: {
+    projectId() {
+      return this.$store.state.projectId
+    },
+  },
   methods: {
+    customHeader() {
+      this.$refs.headerCustom.open(this.tableLabel)
+    },
+
     initTableData() {
       let lastWorkspaceId = getCurrentWorkspaceId();
       this.condition.workspaceId = lastWorkspaceId;
-      if (!getCurrentProjectID()) {
+      if (!this.projectId) {
         return;
       }
-      this.condition.projectId = getCurrentProjectID();
+      this.condition.projectId = this.projectId;
       this.result = this.$post("/test/case/review/list/" + this.currentPage + "/" + this.pageSize, this.condition, response => {
         let data = response.data;
         this.total = data.itemCount;
         this.tableData = data.listObject;
+        this.tableData.forEach(item => {
+          if (item.tags && item.tags.length > 0) {
+            item.tags = JSON.parse(item.tags);
+          }
+        })
         for (let i = 0; i < this.tableData.length; i++) {
           let path = "/test/case/review/project";
           this.$post(path, {id: this.tableData[i].id}, res => {
@@ -163,12 +217,13 @@ export default {
           })
         }
       });
+      getLabel(this, TEST_CASE_REVIEW_LIST);
     },
     intoReview(row) {
       this.$router.push('/track/review/view/' + row.id);
     },
     testCaseReviewCreate() {
-      if (!getCurrentProjectID()) {
+      if (!this.projectId) {
         this.$warning(this.$t('commons.check_project_tip'));
         return;
       }

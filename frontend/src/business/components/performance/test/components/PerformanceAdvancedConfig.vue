@@ -81,8 +81,8 @@
             <div>{{ $t('load_test.connect_timeout') }}</div>
           </el-form-item>
           <el-form-item>
-            <el-input-number :disabled="readOnly" size="mini" v-model="timeout" :min="10"
-                             :max="100000"></el-input-number>
+            <el-input-number :disabled="readOnly" size="mini" v-model="timeout"
+                             :min="0"></el-input-number>
           </el-form-item>
           <el-form-item>
             ms
@@ -95,7 +95,8 @@
             <div>{{ $t('load_test.response_timeout') }}</div>
           </el-form-item>
           <el-form-item>
-            <el-input-number :disabled="readOnly" size="mini" v-model="responseTimeout"></el-input-number>
+            <el-input-number :disabled="readOnly" size="mini" :min="0"
+                             v-model="responseTimeout"></el-input-number>
           </el-form-item>
           <el-form-item>
             ms
@@ -117,24 +118,128 @@
         </el-form>
       </el-col>
     </el-row>
+    <el-row>
+      <el-col :span="8">
+        <el-form :inline="true">
+          <el-form-item>
+            <div>
+              {{ $t('load_test.granularity') }}
+              <el-popover
+                placement="bottom"
+                width="400"
+                trigger="hover">
+                <el-table :data="granularityData">
+                  <el-table-column property="start" :label="$t('load_test.duration')">
+                    <template v-slot:default="scope">
+                      <span>{{ scope.row.start }}S - {{ scope.row.end }}S</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column property="granularity" :label="$t('load_test.granularity')"/>
+                </el-table>
+                <i slot="reference" class="el-icon-info pointer"/>
+              </el-popover>
+            </div>
+          </el-form-item>
+          <el-form-item>
+            <el-select v-model="granularity" :placeholder="$t('commons.please_select')" size="mini" clearable>
+              <el-option v-for="op in granularityData" :key="op.granularity" :label="op.granularity"
+                         :value="op.granularity"></el-option>
+            </el-select>
+          </el-form-item>
+        </el-form>
+      </el-col>
+    </el-row>
+
+    <el-row>
+      <el-col :span="8">
+        <h3>监控集成</h3>
+        <el-button :disabled="readOnly" icon="el-icon-circle-plus-outline" plain size="mini" @click="addMonitor">
+          {{ $t('commons.add') }}
+        </el-button>
+      </el-col>
+    </el-row>
+    <el-col :span="24">
+      <el-table :data="monitorParams" size="mini" class="tb-edit" align="center" border highlight-current-row>
+        <el-table-column
+          align="center"
+          prop="name"
+          label="名称">
+        </el-table-column>
+        <!--        <el-table-column-->
+        <!--          align="center"-->
+        <!--          prop="environmentName"-->
+        <!--          label="所属环境">-->
+        <!--        </el-table-column>-->
+        <!--        <el-table-column-->
+        <!--          align="center"-->
+        <!--          prop="authStatus"-->
+        <!--          label="认证状态">-->
+        <!--        </el-table-column>-->
+        <!--        <el-table-column-->
+        <!--          align="center"-->
+        <!--          prop="monitorStatus"-->
+        <!--          label="监控状态">-->
+        <el-table-column
+          align="center"
+          prop="ip"
+          label="IP">
+        </el-table-column>
+        <el-table-column
+          align="center"
+          prop="port"
+          label="Port">
+        </el-table-column>
+        <el-table-column
+          align="center"
+          prop="description"
+          label="描述">
+        </el-table-column>
+        <el-table-column align="center" :label="$t('load_test.operating')">
+          <template v-slot:default="{row, $index}">
+            <ms-table-operator-button :disabled="readOnly" tip="编辑" icon="el-icon-edit"
+                                      type="primary"
+                                      @exec="modifyMonitor(row, $index)"/>
+            <ms-table-operator-button :disabled="readOnly" :tip="$t('commons.delete')" icon="el-icon-delete"
+                                      type="danger"
+                                      @exec="delMonitor(row, $index)"/>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-col>
+
+    <edit-monitor ref="monitorDialog" :testId="testId" :list.sync="monitorParams"/>
   </div>
 </template>
 
 <script>
 import MsTableOperatorButton from "../../../common/components/MsTableOperatorButton";
+import EditMonitor from "@/business/components/performance/test/components/EditMonitor";
 
 export default {
   name: "PerformanceAdvancedConfig",
-  components: {MsTableOperatorButton},
+  components: {EditMonitor, MsTableOperatorButton},
   data() {
     return {
-      timeout: 2000,
-      responseTimeout: null,
+      timeout: undefined,
+      responseTimeout: undefined,
       statusCode: [],
       domains: [],
       params: [],
+      monitorParams: [],
       statusCodeStr: '',
-    }
+      granularity: undefined,
+      granularityData: [
+        {start: 0, end: 100, granularity: 1},
+        {start: 101, end: 500, granularity: 5},
+        {start: 501, end: 1000, granularity: 10},
+        {start: 1001, end: 3000, granularity: 30},
+        {start: 3001, end: 6000, granularity: 60},
+        {start: 6001, end: 30000, granularity: 300},
+        {start: 30001, end: 60000, granularity: 600},
+        {start: 60001, end: 180000, granularity: 1800},
+        {start: 180001, end: 360000, granularity: 3600},
+      ]
+    };
   },
   props: {
     readOnly: {
@@ -160,12 +265,14 @@ export default {
       this.$get('/performance/get-advanced-config/' + this.testId, (response) => {
         if (response.data) {
           let data = JSON.parse(response.data);
-          this.timeout = data.timeout || 10;
+          this.timeout = data.timeout;
           this.responseTimeout = data.responseTimeout;
           this.statusCode = data.statusCode || [];
           this.statusCodeStr = this.statusCode.join(',');
           this.domains = data.domains || [];
           this.params = data.params || [];
+          this.granularity = data.granularity;
+          this.monitorParams = data.monitorParams || [];
         }
       });
     },
@@ -188,7 +295,7 @@ export default {
       }
     },
     edit(row) {
-      row.edit = !row.edit
+      row.edit = !row.edit;
     },
     del(row, dataName, index) {
       this[dataName].splice(index, 1);
@@ -252,10 +359,24 @@ export default {
         statusCode: statusCode,
         params: this.params,
         domains: this.domains,
+        granularity: this.granularity,
+        monitorParams: this.monitorParams
       };
     },
+    addMonitor() {
+      this.$refs.monitorDialog.open();
+    },
+    modifyMonitor(row, index) {
+      this.$refs.monitorDialog.open(row, index);
+    },
+    delMonitor(row, index) {
+      this.monitorParams.splice(index, 1);
+    },
+    refreshStatus() {
+
+    },
   }
-}
+};
 </script>
 
 <style scoped>
@@ -285,6 +406,10 @@ export default {
 
 .el-col .el-table {
   align: center;
+}
+
+.pointer {
+  cursor: pointer;
 }
 
 </style>

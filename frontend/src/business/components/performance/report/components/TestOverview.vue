@@ -14,7 +14,7 @@
         <el-card shadow="always" class="ms-card-index-2">
           <span class="ms-card-data">
             <span class="ms-card-data-digital">{{ avgTransactions }}</span>
-            <span class="ms-card-data-unit"> Transactions/s</span>
+            <span class="ms-card-data-unit"> TPS</span>
           </span>
           <span class="ms-card-desc">Avg.Transactions</span>
         </el-card>
@@ -148,7 +148,9 @@ export default {
           },
           tooltip: {
             show: true,
-            trigger: 'axis'
+            trigger: 'axis',
+            // extraCssText: 'z-index: 999;',
+            confine: true,
           },
           legend: {},
           xAxis: {},
@@ -226,7 +228,8 @@ export default {
           tooltip: {
             show: true,
             trigger: 'axis',
-            extraCssText: 'z-index: 999;',
+            // extraCssText: 'z-index: 999;',
+            confine: true,
             formatter: function (params, ticket, callback) {
               let result = "";
               let name = params[0].name;
@@ -306,7 +309,8 @@ export default {
           tooltip: {
             show: true,
             trigger: 'axis',
-            extraCssText: 'z-index: 999;',
+            // extraCssText: 'z-index: 999;',
+            confine: true,
             formatter: function (params, ticket, callback) {
               let result = "";
               let name = params[0].name;
@@ -376,7 +380,8 @@ export default {
           tooltip: {
             show: true,
             trigger: 'axis',
-            extraCssText: 'z-index: 999;',
+            // extraCssText: 'z-index: 999;',
+            confine: true,
             formatter: function (params, ticket, callback) {
               let result = "";
               let name = params[0].name;
@@ -462,7 +467,9 @@ export default {
         let items = {
           name: name,
           type: 'line',
-          data: d
+          data: d,
+          smooth: true,
+          sampling: 'lttb'
         };
         let seriesArrayNames = seriesArray.map(m => m.name);
         if (seriesArrayNames.includes(name)) {

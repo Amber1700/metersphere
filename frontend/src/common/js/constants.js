@@ -1,3 +1,15 @@
+export const TEST_CASE_LIST = 'test_case_list'
+export const TEST_CASE_REVIEW_LIST = 'test_case_review_list'
+export const API_LIST = 'api_list'
+export const API_CASE_LIST = 'api_case_list'
+export const API_SCENARIO_LIST = 'api_scenario_list'
+export const TEST_CASE_REVIEW_CASE_LIST = 'test_case_review_case_list'
+export const TEST_PLAN_LIST = 'test_plan_list'
+export const TEST_PLAN_FUNCTION_TEST_CASE = 'test_plan_function_test_case'
+export const TEST_PLAN_API_CASE = 'test_plan_api_case'
+export const TEST_PLAN_LOAD_CASE = 'test_plan_load_case'
+export const TEST_PLAN_SCENARIO_CASE = 'test_plan_scenario_case'
+
 export const TokenKey = 'Admin-Token';
 export const LicenseKey = 'License';
 export const DEFAULT_LANGUAGE = 'default_language';
@@ -156,3 +168,15 @@ export const JMETER_FUNC = [
   {type: "String", name: "${__escapeHtml}", description: "Encode strings using HTML encoding"},
   {type: "String", name: "${__TestPlanName}", description: "Return name of current test plan"},
 ]
+
+export const ORIGIN_COLOR = '#2c2a48';
+export const ORIGIN_COLOR_SHALLOW = '#595591';
+export const COUNT_NUMBER = '#6C317C';
+export const COUNT_NUMBER_SHALLOW = '#CDB9D2';
+export const PRIMARY_COLOR = '#783887';
+
+export const CONFIG_TYPE = {
+  NOT: "NOT",
+  NORMAL: "NORMAL",
+  ABNORMAL: "ABNORMAL"
+}

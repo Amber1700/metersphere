@@ -1,16 +1,22 @@
 import {
+  COUNT_NUMBER,
+  COUNT_NUMBER_SHALLOW,
   LicenseKey,
+  ORIGIN_COLOR,
+  ORIGIN_COLOR_SHALLOW,
+  PRIMARY_COLOR,
+  PROJECT_ID,
   REFRESH_SESSION_USER_URL,
   ROLE_ADMIN,
   ROLE_ORG_ADMIN,
   ROLE_TEST_MANAGER,
   ROLE_TEST_USER,
   ROLE_TEST_VIEWER,
-  TokenKey,
-  PROJECT_ID
+  TokenKey
 } from "./constants";
 import axios from "axios";
 import {jsPDF} from "jspdf";
+import JSEncrypt from 'jsencrypt';
 
 export function hasRole(role) {
   let user = getCurrentUser();
@@ -43,7 +49,7 @@ export function hasRolePermission(role) {
       }
     }
   }
-  return false
+  return false;
 }
 
 export function hasLicense() {
@@ -89,8 +95,23 @@ export function getCurrentUser() {
   return JSON.parse(localStorage.getItem(TokenKey));
 }
 
+export function getCurrentUserId() {
+  let user = JSON.parse(localStorage.getItem(TokenKey));
+  return user.id;
+}
+
 export function getCurrentProjectID() {
   return localStorage.getItem(PROJECT_ID);
+}
+
+export function enableModules(...modules) {
+  for (let module of modules) {
+    let moduleStatus = localStorage.getItem('module_' + module);
+    if (moduleStatus === 'DISABLE') {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function saveLocalStorage(response) {
@@ -112,7 +133,7 @@ export function refreshSessionAndCookies(sign, sourceId) {
   axios.post(REFRESH_SESSION_USER_URL + "/" + sign + "/" + sourceId).then(r => {
     saveLocalStorage(r.data);
     window.location.reload();
-  })
+  });
 }
 
 
@@ -138,45 +159,6 @@ export function humpToLine(name) {
   return name.replace(/([A-Z])/g, "_$1").toLowerCase();
 }
 
-//表格数据过滤
-export function _filter(filters, condition) {
-  if (!condition.filters) {
-    condition.filters = {};
-  }
-  for (let filter in filters) {
-    if (filters.hasOwnProperty(filter)) {
-      if (filters[filter] && filters[filter].length > 0) {
-        condition.filters[humpToLine(filter)] = filters[filter];
-      } else {
-        condition.filters[humpToLine(filter)] = null;
-      }
-    }
-  }
-}
-
-//表格数据排序
-export function _sort(column, condition) {
-  column.prop = humpToLine(column.prop);
-  if (column.order === 'descending') {
-    column.order = 'desc';
-  } else {
-    column.order = 'asc';
-  }
-  if (!condition.orders) {
-    condition.orders = [];
-  }
-  let hasProp = false;
-  condition.orders.forEach(order => {
-    if (order.name === column.prop) {
-      order.type = column.order;
-      hasProp = true;
-    }
-  });
-  if (!hasProp) {
-    condition.orders.push({name: column.prop, type: column.order});
-  }
-}
-
 export function downloadFile(name, content) {
   const blob = new Blob([content]);
   if ("download" in document.createElement("a")) {
@@ -186,10 +168,10 @@ export function downloadFile(name, content) {
     aTag.download = name;
     aTag.href = URL.createObjectURL(blob);
     aTag.click();
-    URL.revokeObjectURL(aTag.href)
+    URL.revokeObjectURL(aTag.href);
   } else {
     // IE10+下载
-    navigator.msSaveBlob(blob, name)
+    navigator.msSaveBlob(blob, name);
   }
 }
 
@@ -316,27 +298,29 @@ export function getBodyUploadFiles(obj, runData) {
 
 export function _getBodyUploadFiles(request, bodyUploadFiles, obj) {
   let body = null;
-  if (request.hashTree && request.hashTree.length > 0 && request.hashTree[0].body) {
+  if (request.hashTree && request.hashTree.length > 0 && request.hashTree[0] && request.hashTree[0].body) {
     body = request.hashTree[0].body;
   } else if (request.body) {
     body = request.body;
   }
   if (body) {
-    body.kvs.forEach(param => {
-      if (param.files) {
-        param.files.forEach(item => {
-          if (item.file) {
-            if (!item.id) {
-              let fileId = getUUID().substring(0, 12);
-              item.name = item.file.name;
-              item.id = fileId;
+    if (body.kvs) {
+      body.kvs.forEach(param => {
+        if (param.files) {
+          param.files.forEach(item => {
+            if (item.file) {
+              if (!item.id) {
+                let fileId = getUUID().substring(0, 12);
+                item.name = item.file.name;
+                item.id = fileId;
+              }
+              obj.bodyUploadIds.push(item.id);
+              bodyUploadFiles.push(item.file);
             }
-            obj.bodyUploadIds.push(item.id);
-            bodyUploadFiles.push(item.file);
-          }
-        });
-      }
-    });
+          });
+        }
+      });
+    }
     if (body.binary) {
       body.binary.forEach(param => {
         if (param.files) {
@@ -356,6 +340,7 @@ export function _getBodyUploadFiles(request, bodyUploadFiles, obj) {
     }
   }
 }
+
 export function handleCtrlSEvent(event, func) {
   if (event.keyCode === 83 && event.ctrlKey) {
     // console.log('拦截到 ctrl + s');//ctrl+s
@@ -364,4 +349,60 @@ export function handleCtrlSEvent(event, func) {
     event.returnValue = false;
     return false;
   }
+}
+
+export function strMapToObj(strMap) {
+  if (strMap) {
+    let obj = Object.create(null);
+    for (let [k, v] of strMap) {
+      obj[k] = v;
+    }
+    return obj;
+  }
+  return null;
+}
+
+export function objToStrMap(obj) {
+  let strMap = new Map();
+  for (let k of Object.keys(obj)) {
+    strMap.set(k, obj[k]);
+  }
+  return strMap;
+}
+
+export function setColor(a, b, c, d, e) {
+  // 顶部菜单背景色
+  document.body.style.setProperty('--color', a);
+  document.body.style.setProperty('--color_shallow', b);
+  // 首页颜色
+  document.body.style.setProperty('--count_number', c);
+  document.body.style.setProperty('--count_number_shallow', d);
+  // 主颜色
+  document.body.style.setProperty('--primary_color', e);
+}
+
+export function setDefaultTheme() {
+  setColor(ORIGIN_COLOR, ORIGIN_COLOR_SHALLOW, COUNT_NUMBER, COUNT_NUMBER_SHALLOW, PRIMARY_COLOR);
+}
+
+export function publicKeyEncrypt(input, publicKey) {
+
+  let jsencrypt = new JSEncrypt({default_key_size: 1024});
+  jsencrypt.setPublicKey(publicKey);
+
+  return jsencrypt.encrypt(input);
+}
+
+export function getNodePath(id, moduleOptions) {
+  for (let i = 0; i < moduleOptions.length; i++) {
+    let item = moduleOptions[i];
+    if (id === item.id) {
+      return item.path;
+    }
+  }
+  return '';
+}
+
+export function getDefaultTableHeight() {
+  return document.documentElement.clientHeight - 280;
 }

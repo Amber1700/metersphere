@@ -6,10 +6,7 @@ import io.metersphere.base.mapper.ext.ExtProjectMapper;
 import io.metersphere.base.mapper.ext.ExtTestCaseMapper;
 import io.metersphere.base.mapper.ext.ExtTestCaseReviewMapper;
 import io.metersphere.base.mapper.ext.ExtTestReviewCaseMapper;
-import io.metersphere.commons.constants.NoticeConstants;
-import io.metersphere.commons.constants.TestCaseReviewStatus;
-import io.metersphere.commons.constants.TestPlanStatus;
-import io.metersphere.commons.constants.TestReviewCaseStatus;
+import io.metersphere.commons.constants.*;
 import io.metersphere.commons.exception.MSException;
 import io.metersphere.commons.user.SessionUser;
 import io.metersphere.commons.utils.LogUtil;
@@ -77,23 +74,24 @@ public class TestCaseReviewService {
     private NoticeSendService noticeSendService;
     @Resource
     private SystemParameterService systemParameterService;
+    @Resource
+    private TestCaseReviewLoadMapper testCaseReviewLoadMapper;
+    @Resource
+    private TestCaseReviewApiCaseMapper testCaseReviewApiCaseMapper;
+    @Resource
+    private TestCaseReviewScenarioMapper testCaseReviewScenarioMapper;
+    @Resource
+    private ApiTestCaseMapper apiTestCaseMapper;
+    @Resource
+    private ApiScenarioMapper apiScenarioMapper;
+    @Resource
+    private ApiDefinitionMapper apiDefinitionMapper;
 
-    public void saveTestCaseReview(SaveTestCaseReviewRequest reviewRequest) {
+
+    public String saveTestCaseReview(SaveTestCaseReviewRequest reviewRequest) {
         checkCaseReviewExist(reviewRequest);
         String reviewId = UUID.randomUUID().toString();
-        List<String> projectIds = reviewRequest.getProjectIds();
         List<String> userIds = reviewRequest.getUserIds();//执行人
-        if (!CollectionUtils.isEmpty(projectIds)) {
-            List<String> ids = projectIds.stream().distinct().collect(Collectors.toList());
-            // 如果关联项目id中包含当前项目id进行移除
-            ids.remove(SessionUtils.getCurrentProjectId());
-            ids.forEach(projectId -> {
-                TestCaseReviewProject testCaseReviewProject = new TestCaseReviewProject();
-                testCaseReviewProject.setProjectId(projectId);
-                testCaseReviewProject.setReviewId(reviewId);
-                testCaseReviewProjectMapper.insertSelective(testCaseReviewProject);
-            });
-        }
 
         userIds.forEach(userId -> {
             TestCaseReviewUsers testCaseReviewUsers = new TestCaseReviewUsers();
@@ -121,6 +119,7 @@ public class TestCaseReviewService {
                 .event(NoticeConstants.Event.CREATE)
                 .build();
         noticeSendService.send(NoticeConstants.TaskType.REVIEW_TASK, noticeModel);
+        return reviewRequest.getId();
     }
 
     //评审内容
@@ -214,9 +213,8 @@ public class TestCaseReviewService {
         return extTestCaseReviewMapper.listByWorkspaceId(currentWorkspaceId, SessionUtils.getUserId(), SessionUtils.getCurrentProjectId());
     }
 
-    public void editCaseReview(SaveTestCaseReviewRequest testCaseReview) {
+    public String editCaseReview(SaveTestCaseReviewRequest testCaseReview) {
         editCaseReviewer(testCaseReview);
-        editCaseReviewProject(testCaseReview);
         testCaseReview.setUpdateTime(System.currentTimeMillis());
         checkCaseReviewExist(testCaseReview);
         testCaseReviewMapper.updateByPrimaryKeySelective(testCaseReview);
@@ -233,6 +231,7 @@ public class TestCaseReviewService {
                 .event(NoticeConstants.Event.UPDATE)
                 .build();
         noticeSendService.send(NoticeConstants.TaskType.REVIEW_TASK, noticeModel);
+        return testCaseReview.getId();
     }
 
     private void editCaseReviewer(SaveTestCaseReviewRequest testCaseReview) {
@@ -257,56 +256,6 @@ public class TestCaseReviewService {
         TestCaseReviewUsersExample example = new TestCaseReviewUsersExample();
         example.createCriteria().andReviewIdEqualTo(id).andUserIdNotIn(reviewerIds);
         testCaseReviewUsersMapper.deleteByExample(example);
-    }
-
-    private void editCaseReviewProject(SaveTestCaseReviewRequest testCaseReview) {
-        List<String> projectIds = testCaseReview.getProjectIds();
-        if (!CollectionUtils.isEmpty(projectIds)) {
-            projectIds.remove(testCaseReview.getProjectId());
-        }
-        String id = testCaseReview.getId();
-        if (StringUtils.isNotBlank(testCaseReview.getProjectId())) {
-            TestCaseReviewProjectExample testCaseReviewProjectExample = new TestCaseReviewProjectExample();
-            testCaseReviewProjectExample.createCriteria().andReviewIdEqualTo(id);
-            List<TestCaseReviewProject> testCaseReviewProjects = testCaseReviewProjectMapper.selectByExample(testCaseReviewProjectExample);
-            List<String> dbProjectIds = testCaseReviewProjects.stream().map(TestCaseReviewProject::getProjectId).collect(Collectors.toList());
-            projectIds.forEach(projectId -> {
-                if (!dbProjectIds.contains(projectId)) {
-                    TestCaseReviewProject testCaseReviewProject = new TestCaseReviewProject();
-                    testCaseReviewProject.setReviewId(id);
-                    testCaseReviewProject.setProjectId(projectId);
-                    testCaseReviewProjectMapper.insert(testCaseReviewProject);
-                }
-            });
-
-            TestCaseReviewProjectExample example = new TestCaseReviewProjectExample();
-            TestCaseReviewProjectExample.Criteria criteria1 = example.createCriteria().andReviewIdEqualTo(id);
-            if (!CollectionUtils.isEmpty(projectIds)) {
-                criteria1.andProjectIdNotIn(projectIds);
-            }
-            testCaseReviewProjectMapper.deleteByExample(example);
-
-
-            // 关联的项目下的用例idList
-            List<String> caseIds = null;
-            // 测试计划所属项目下的用例不解除关联
-            projectIds.add(testCaseReview.getProjectId());
-            // 关联的项目下的用例idList
-            if (!CollectionUtils.isEmpty(projectIds)) {
-                TestCaseExample testCaseExample = new TestCaseExample();
-                testCaseExample.createCriteria().andProjectIdIn(projectIds);
-                List<TestCase> caseList = testCaseMapper.selectByExample(testCaseExample);
-                caseIds = caseList.stream().map(TestCase::getId).collect(Collectors.toList());
-            }
-
-            TestCaseReviewTestCaseExample testCaseReviewTestCaseExample = new TestCaseReviewTestCaseExample();
-            TestCaseReviewTestCaseExample.Criteria criteria = testCaseReviewTestCaseExample.createCriteria().andReviewIdEqualTo(id);
-            if (!CollectionUtils.isEmpty(caseIds)) {
-                criteria.andCaseIdNotIn(caseIds);
-            }
-            testCaseReviewTestCaseMapper.deleteByExample(testCaseReviewTestCaseExample);
-        }
-
     }
 
     private void checkCaseReviewExist(TestCaseReview testCaseReview) {
@@ -382,20 +331,6 @@ public class TestCaseReviewService {
     }
 
     public void testReviewRelevance(ReviewRelevanceRequest request) {
-        String reviewId = request.getReviewId();
-        List<String> userIds = getTestCaseReviewerIds(reviewId);
-
-        String creator = "";
-        TestCaseReview review = testCaseReviewMapper.selectByPrimaryKey(reviewId);
-        if (review != null) {
-            creator = review.getCreator();
-        }
-
-        String currentId = SessionUtils.getUser().getId();
-        if (!userIds.contains(currentId) && !StringUtils.equals(creator, currentId)) {
-            MSException.throwException("没有权限，不能关联用例！");
-        }
-
         List<String> testCaseIds = request.getTestCaseIds();
 
         if (testCaseIds.isEmpty()) {
@@ -427,7 +362,65 @@ public class TestCaseReviewService {
         }
 
         sqlSession.flushStatements();
+        //同步添加关联的接口和测试用例
+     /*   if(request.getChecked()){
+            if (!testCaseIds.isEmpty()) {
+                testCaseIds.forEach(caseId -> {
+                    TestCaseWithBLOBs testDtail=testCaseMapper.selectByPrimaryKey(caseId);
+                    if(StringUtils.equals(testDtail.getType(), TestCaseStatus.performance.name())){
+                        TestCaseReviewLoad t=new TestCaseReviewLoad();
+                        t.setId(UUID.randomUUID().toString());
+                        t.setTestCaseReviewId(request.getReviewId());
+                        t.setLoadCaseId(testDtail.getTestId());
+                        t.setCreateTime(System.currentTimeMillis());
+                        t.setUpdateTime(System.currentTimeMillis());
+                        TestCaseReviewLoadExample example=new TestCaseReviewLoadExample();
+                        example.createCriteria().andTestCaseReviewIdEqualTo(request.getReviewId()).andLoadCaseIdEqualTo(t.getLoadCaseId());
+                        if (testCaseReviewLoadMapper.countByExample(example) <=0) {
+                            testCaseReviewLoadMapper.insert(t);
+                        }
 
+                    }
+                    if(StringUtils.equals(testDtail.getType(),TestCaseStatus.testcase.name())){
+                        TestCaseReviewApiCase t=new TestCaseReviewApiCase();
+                        ApiTestCaseWithBLOBs apitest=apiTestCaseMapper.selectByPrimaryKey(testDtail.getTestId());
+                        ApiDefinitionWithBLOBs apidefinition=apiDefinitionMapper.selectByPrimaryKey(apitest.getApiDefinitionId());
+                        t.setId(UUID.randomUUID().toString());
+                        t.setTestCaseReviewId(request.getReviewId());
+                        t.setApiCaseId(testDtail.getTestId());
+                        t.setEnvironmentId(apidefinition.getEnvironmentId());
+                        t.setCreateTime(System.currentTimeMillis());
+                        t.setUpdateTime(System.currentTimeMillis());
+                        TestCaseReviewApiCaseExample example=new TestCaseReviewApiCaseExample();
+                        example.createCriteria().andTestCaseReviewIdEqualTo(request.getReviewId()).andApiCaseIdEqualTo(t.getApiCaseId());
+                        if(testCaseReviewApiCaseMapper.countByExample(example)<=0){
+                            testCaseReviewApiCaseMapper.insert(t);
+                        }
+
+                    }
+                    if(StringUtils.equals(testDtail.getType(),TestCaseStatus.automation.name())){
+                        TestCaseReviewScenario t=new TestCaseReviewScenario();
+                        ApiScenarioWithBLOBs testPlanApiScenario=apiScenarioMapper.selectByPrimaryKey(testDtail.getTestId());
+                        t.setId(UUID.randomUUID().toString());
+                        t.setTestCaseReviewId(request.getReviewId());
+                        t.setApiScenarioId(testDtail.getTestId());
+                        t.setLastResult(testPlanApiScenario.getLastResult());
+                        t.setPassRate(testPlanApiScenario.getPassRate());
+                        t.setReportId(testPlanApiScenario.getReportId());
+                        t.setStatus(testPlanApiScenario.getStatus());
+                        t.setCreateTime(System.currentTimeMillis());
+                        t.setUpdateTime(System.currentTimeMillis());
+                        TestCaseReviewScenarioExample example=new TestCaseReviewScenarioExample();
+                        example.createCriteria().andTestCaseReviewIdEqualTo(request.getReviewId()).andApiScenarioIdEqualTo(t.getApiScenarioId());
+                        if(testCaseReviewScenarioMapper.countByExample(example)<=0){
+                            testCaseReviewScenarioMapper.insert(t);
+                        }
+
+                    }
+
+                });
+            }
+        }*/
         TestCaseReview testCaseReview = testCaseReviewMapper.selectByPrimaryKey(request.getReviewId());
         if (StringUtils.equals(testCaseReview.getStatus(), TestCaseReviewStatus.Prepare.name())
                 || StringUtils.equals(testCaseReview.getStatus(), TestCaseReviewStatus.Completed.name())) {

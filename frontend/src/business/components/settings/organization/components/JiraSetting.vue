@@ -7,7 +7,7 @@
           <el-input v-model="form.account" :placeholder="$t('organization.integration.input_api_account')"/>
         </el-form-item>
         <el-form-item :label="$t('organization.integration.password')" prop="password">
-          <el-input v-model="form.password" auto-complete="new-password"
+          <el-input v-model="form.password" auto-complete="new-password" v-if="showInput"
                     :placeholder="$t('organization.integration.input_api_password')" show-password/>
         </el-form-item>
         <el-form-item :label="$t('organization.integration.jira_url')" prop="url">
@@ -16,6 +16,9 @@
         <el-form-item :label="$t('organization.integration.jira_issuetype')" prop="issuetype">
           <el-input v-model="form.issuetype" :placeholder="$t('organization.integration.input_jira_issuetype')"/>
         </el-form-item>
+        <el-form-item :label="$t('organization.integration.jira_storytype')" prop="storytype">
+          <el-input v-model="form.storytype" :placeholder="$t('organization.integration.input_jira_storytype')"/>
+        </el-form-item>
       </el-form>
     </div>
 
@@ -23,6 +26,7 @@
                     @init="init"
                     @testConnection="testConnection"
                     @cancelIntegration="cancelIntegration"
+                    @reloadPassInput="reloadPassInput"
                     :form="form"
                     :show.sync="show"
                     ref="bugBtn"/>
@@ -56,6 +60,7 @@ export default {
   data() {
     return {
       show: true,
+      showInput: true,
       form: {},
       rules: {
         account: {
@@ -77,6 +82,11 @@ export default {
           required: true,
           message: this.$t('organization.integration.input_jira_issuetype'),
           trigger: ['change', 'blur']
+        },
+        storytype: {
+          required: true,
+          message: this.$t('organization.integration.input_jira_storytype'),
+          trigger: ['change', 'blur']
         }
       },
     }
@@ -95,6 +105,7 @@ export default {
           this.$set(this.form, 'password', config.password);
           this.$set(this.form, 'url', config.url);
           this.$set(this.form, 'issuetype', config.issuetype);
+          this.$set(this.form, 'storytype', config.storytype);
         } else {
           this.clear();
         }
@@ -112,7 +123,8 @@ export default {
             account: this.form.account,
             password: this.form.password,
             url: formatUrl,
-            issuetype: this.form.issuetype
+            issuetype: this.form.issuetype,
+            storytype: this.form.storytype
           };
           const {lastOrganizationId} = getCurrentUser();
           param.organizationId = lastOrganizationId;
@@ -123,6 +135,7 @@ export default {
             this.$refs.bugBtn.showEdit = true;
             this.$refs.bugBtn.showSave = false;
             this.$refs.bugBtn.showCancel = false;
+            this.reloadPassInput();
             this.init();
             this.$success(this.$t('commons.save_success'));
           });
@@ -136,6 +149,7 @@ export default {
       this.$set(this.form, 'password', '');
       this.$set(this.form, 'url', '');
       this.$set(this.form, 'issuetype', '');
+      this.$set(this.form, 'storytype', '');
       this.$nextTick(() => {
         this.$refs.form.clearValidate();
       });
@@ -170,6 +184,12 @@ export default {
       } else {
         this.$warning(this.$t('organization.integration.not_integrated'));
       }
+    },
+    reloadPassInput() {
+      this.showInput = false;
+      this.$nextTick(function () {
+        this.showInput = true;
+      });
     }
   }
 }

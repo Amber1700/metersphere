@@ -18,10 +18,16 @@ public class JmeterFileController {
     @Resource
     private JmeterFileService jmeterFileService;
 
+    @GetMapping("ping")
+    public String checkStatus() {
+        return "PONG";
+    }
+
     @GetMapping("download")
     public ResponseEntity<byte[]> downloadJmeterFiles(@RequestParam("testId") String testId, @RequestParam("resourceId") String resourceId,
-                                                      @RequestParam("ratio") double ratio, @RequestParam("startTime") long startTime,
+                                                      @RequestParam("ratio") double ratio,
                                                       @RequestParam("reportId") String reportId, @RequestParam("resourceIndex") int resourceIndex) {
+        long startTime = System.currentTimeMillis();
         byte[] bytes = jmeterFileService.downloadZip(testId, resourceId, ratio, startTime, reportId, resourceIndex);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/octet-stream"))

@@ -4,6 +4,7 @@
     @setProject="setProject"
     @save="saveCaseRelevance"
     :plan-id="planId"
+    :flag="true"
     ref="baseRelevance">
 
     <template v-slot:aside>
@@ -61,37 +62,37 @@
       </el-table-column>
     </el-table>
 
-    <div v-if="!lineStatus" style="text-align: center">{{$t('test_track.review_view.last_page')}}</div>
-    <div style="text-align: center">共 {{total}} 条</div>
-
+    <div v-if="!lineStatus" style="text-align: center">{{ $t('test_track.review_view.last_page') }}</div>
+    <div style="text-align: center">共 {{ total }} 条</div>
   </test-case-relevance-base>
 
 </template>
 
 <script>
 
-  import NodeTree from '../../../../common/NodeTree';
-  import PriorityTableItem from "../../../../common/tableItems/planview/PriorityTableItem";
-  import TypeTableItem from "../../../../common/tableItems/planview/TypeTableItem";
-  import MsTableSearchBar from "../../../../../common/components/MsTableSearchBar";
-  import MsTableAdvSearchBar from "../../../../../common/components/search/MsTableAdvSearchBar";
-  import MsTableHeader from "../../../../../common/components/MsTableHeader";
-  import {TEST_CASE_CONFIGS} from "../../../../../common/components/search/search-components";
-  import elTableInfiniteScroll from 'el-table-infinite-scroll';
-  import TestCaseRelevanceBase from "../base/TestCaseRelevanceBase";
-  import {_filter} from "../../../../../../../common/js/utils";
+import NodeTree from '../../../../common/NodeTree';
+import PriorityTableItem from "../../../../common/tableItems/planview/PriorityTableItem";
+import TypeTableItem from "../../../../common/tableItems/planview/TypeTableItem";
+import MsTableSearchBar from "../../../../../common/components/MsTableSearchBar";
+import MsTableAdvSearchBar from "../../../../../common/components/search/MsTableAdvSearchBar";
+import MsTableHeader from "../../../../../common/components/MsTableHeader";
+import {TEST_CASE_CONFIGS} from "../../../../../common/components/search/search-components";
+import elTableInfiniteScroll from 'el-table-infinite-scroll';
+import TestCaseRelevanceBase from "../base/TestCaseRelevanceBase";
+import {_filter} from "@/common/js/tableUtils";
 
-  export default {
-    name: "TestCaseFunctionalRelevance",
-    components: {
-      TestCaseRelevanceBase,
-      NodeTree,
-      PriorityTableItem,
-      TypeTableItem,
-      MsTableSearchBar,
-      MsTableAdvSearchBar,
-      MsTableHeader,
-    },
+
+export default {
+  name: "TestCaseFunctionalRelevance",
+  components: {
+    TestCaseRelevanceBase,
+    NodeTree,
+    PriorityTableItem,
+    TypeTableItem,
+    MsTableSearchBar,
+    MsTableAdvSearchBar,
+    MsTableHeader,
+  },
     directives: {
       'el-table-infinite-scroll': elTableInfiniteScroll
     },
@@ -158,11 +159,12 @@
         this.projectId = projectId;
       },
 
-      saveCaseRelevance() {
+      saveCaseRelevance(item) {
         let param = {};
         param.planId = this.planId;
         param.testCaseIds = [...this.selectIds];
         param.request = this.condition;
+        param.checked = item
         // 选择全选则全部加入到评审，无论是否加载完全部
         if (this.testCases.length === param.testCaseIds.length) {
           param.testCaseIds = ['all'];
@@ -195,7 +197,7 @@
         }
         if (this.projectId) {
           this.condition.projectId = this.projectId;
-          this.result = this.$post(this.buildPagePath('/test/case/name'), this.condition, response => {
+          this.result = this.$post(this.buildPagePath('/test/case/relate'), this.condition, response => {
             let data = response.data;
             this.total = data.itemCount;
             let tableData = data.listObject;
@@ -204,7 +206,7 @@
             });
             flag ? this.testCases = tableData : this.testCases = this.testCases.concat(tableData);
             // 去重处理
-            let hash = {}
+            let hash = {};
             this.testCases = this.testCases.reduce((item, next) => {
               if (!hash[next.id]) {
                 hash[next.id] = true

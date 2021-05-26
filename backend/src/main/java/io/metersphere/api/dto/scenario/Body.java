@@ -1,7 +1,11 @@
 package io.metersphere.api.dto.scenario;
 
+import com.alibaba.fastjson.JSONObject;
 import io.metersphere.api.dto.scenario.request.BodyFile;
 import io.metersphere.commons.json.JSONSchemaGenerator;
+import io.metersphere.commons.utils.FileUtils;
+import io.metersphere.commons.utils.LogUtil;
+import io.metersphere.commons.utils.ScriptEngineUtils;
 import lombok.Data;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -65,19 +69,45 @@ public class Body {
                 sampler.setDoMultipart(true);
             }
         } else {
-            if (!this.isJson()) {
-                sampler.setPostBodyRaw(true);
-            } else {
-                if (StringUtils.isNotEmpty(this.format) && "JSON-SCHEMA".equals(this.format) && this.getJsonSchema() != null) {
-                    this.raw = JSONSchemaGenerator.getJson(com.alibaba.fastjson.JSON.toJSONString(this.getJsonSchema()));
-                }
-            }
+            parseJonBodyMock();
             KeyValue keyValue = new KeyValue("", "JSON-SCHEMA", this.getRaw(), true, true);
+            sampler.setPostBodyRaw(true);
             keyValue.setEnable(true);
             keyValue.setEncode(false);
             body.add(keyValue);
         }
         return body;
+    }
+
+    private void parseJonBodyMock() {
+        try {
+            if (StringUtils.isNotBlank(this.type) && StringUtils.equals(this.type, "JSON")) {
+                if(StringUtils.isNotEmpty(this.format) && this.getJsonSchema() != null
+                        && "JSON-SCHEMA".equals(this.format)) {
+                    this.raw = JSONSchemaGenerator.getJson(com.alibaba.fastjson.JSON.toJSONString(this.getJsonSchema()));
+                } else {    //  json 文本也支持 mock 参数
+                    JSONObject jsonObject = com.alibaba.fastjson.JSON.parseObject(this.getRaw());
+                    jsonMockParse(jsonObject);
+                    this.raw = JSONObject.toJSONString(jsonObject);
+                }
+            }
+        } catch (Exception e) {
+            LogUtil.error(e.getMessage(), e);
+        }
+    }
+
+    private void jsonMockParse(JSONObject jsonObject) {
+        for(String key : jsonObject.keySet()) {
+            Object value = jsonObject.get(key);
+            if(value instanceof JSONObject) {
+                jsonMockParse((JSONObject) value);
+            } else if(value instanceof String) {
+                if (StringUtils.isNotBlank((String) value)) {
+                    value = ScriptEngineUtils.calculate((String) value);
+                }
+                jsonObject.put(key, value);
+            }
+        }
     }
 
     private HTTPFileArg[] httpFileArgs(String requestId) {
@@ -96,11 +126,10 @@ public class Body {
     }
 
     private void setFileArg(List<HTTPFileArg> list, List<BodyFile> files, KeyValue keyValue, String requestId) {
-        final String BODY_FILE_DIR = "/opt/metersphere/data/body";
         if (files != null) {
             files.forEach(file -> {
                 String paramName = keyValue.getName() == null ? requestId : keyValue.getName();
-                String path = BODY_FILE_DIR + '/' + file.getId() + '_' + file.getName();
+                String path = FileUtils.BODY_FILE_DIR + '/' + file.getId() + '_' + file.getName();
                 String mimetype = keyValue.getContentType();
                 list.add(new HTTPFileArg(path, paramName, mimetype));
             });
@@ -117,6 +146,12 @@ public class Body {
 
     public boolean isXml() {
         return StringUtils.equals(type, XML);
+    }
+
+    public void init() {
+        this.type = "";
+        this.raw = "";
+        this.format = "";
     }
 
     public void initKvs() {

@@ -16,9 +16,6 @@ import io.metersphere.performance.controller.request.ReportRequest;
 import io.metersphere.performance.service.ReportService;
 import org.apache.shiro.authz.annotation.Logical;
 import org.apache.shiro.authz.annotation.RequiresRoles;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -32,13 +29,9 @@ public class PerformanceReportController {
     @Resource
     private ReportService reportService;
 
-    @GetMapping("/recent/{count}")
+    @PostMapping("/recent/{count}")
     @RequiresRoles(value = {RoleConstants.TEST_MANAGER, RoleConstants.TEST_USER, RoleConstants.TEST_VIEWER}, logical = Logical.OR)
-    public List<ReportDTO> recentProjects(@PathVariable int count) {
-        String currentWorkspaceId = SessionUtils.getCurrentWorkspaceId();
-        ReportRequest request = new ReportRequest();
-        request.setWorkspaceId(currentWorkspaceId);
-        request.setUserId(SessionUtils.getUserId());
+    public List<ReportDTO> recentProjects(@PathVariable int count, @RequestBody ReportRequest request) {
         // 最近 `count` 个项目
         PageHelper.startPage(1, count);
         return reportService.getRecentReportList(request);
@@ -46,8 +39,6 @@ public class PerformanceReportController {
 
     @PostMapping("/list/all/{goPage}/{pageSize}")
     public Pager<List<ReportDTO>> getReportList(@PathVariable int goPage, @PathVariable int pageSize, @RequestBody ReportRequest request) {
-        String currentWorkspaceId = SessionUtils.getCurrentWorkspaceId();
-        request.setWorkspaceId(currentWorkspaceId);
         Page<Object> page = PageHelper.startPage(goPage, pageSize, true);
         return PageUtils.setPageInfo(page, reportService.getReportList(request));
     }
@@ -114,6 +105,11 @@ public class PerformanceReportController {
         return reportService.getLoadTestReport(reportId);
     }
 
+    @GetMapping("/pool/type/{reportId}")
+    public String getPoolTypeByReportId(@PathVariable String reportId) {
+        return reportService.getPoolTypeByReportId(reportId);
+    }
+
     @GetMapping("log/resource/{reportId}")
     public List<LogDetailDTO> getResourceIds(@PathVariable String reportId) {
         return reportService.getReportLogResource(reportId);
@@ -137,11 +133,7 @@ public class PerformanceReportController {
     }
 
     @GetMapping("/jtl/download/{reportId}")
-    public ResponseEntity<byte[]> downloadJtl(@PathVariable String reportId) {
-        byte[] bytes = reportService.downloadJtl(reportId);
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/octet-stream"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + reportId + ".jtl\"")
-                .body(bytes);
+    public void downloadJtlZip(@PathVariable String reportId, HttpServletResponse response) {
+        reportService.downloadJtlZip(reportId, response);
     }
 }

@@ -9,6 +9,7 @@ import io.metersphere.base.mapper.ext.ExtTestCaseNodeMapper;
 import io.metersphere.base.mapper.ext.ExtTestPlanTestCaseMapper;
 import io.metersphere.commons.constants.TestCaseConstants;
 import io.metersphere.commons.exception.MSException;
+import io.metersphere.commons.utils.SessionUtils;
 import io.metersphere.exception.ExcelException;
 import io.metersphere.i18n.Translator;
 import io.metersphere.service.NodeTreeService;
@@ -106,6 +107,21 @@ public class TestCaseNodeService extends NodeTreeService<TestCaseNodeDTO> {
     }
 
     public List<TestCaseNodeDTO> getNodeTreeByProjectId(String projectId) {
+        // 判断当前项目下是否有默认模块，没有添加默认模块
+        TestCaseNodeExample example = new TestCaseNodeExample();
+        example.createCriteria().andProjectIdEqualTo(projectId).andNameEqualTo("默认模块");
+        long count = testCaseNodeMapper.countByExample(example);
+        if (count <= 0) {
+            TestCaseNode record = new TestCaseNode();
+            record.setId(UUID.randomUUID().toString());
+            record.setName("默认模块");
+            record.setPos(1.0);
+            record.setLevel(1);
+            record.setCreateTime(System.currentTimeMillis());
+            record.setUpdateTime(System.currentTimeMillis());
+            record.setProjectId(projectId);
+            testCaseNodeMapper.insert(record);
+        }
         List<TestCaseNodeDTO> testCaseNodes = extTestCaseNodeMapper.getNodeTreeByProjectId(projectId);
         return getNodeTrees(testCaseNodes);
     }
@@ -180,14 +196,18 @@ public class TestCaseNodeService extends NodeTreeService<TestCaseNodeDTO> {
         List<String> projectIds = testPlanProjectService.getProjectIdsByPlanId(planId);
         projectIds.forEach(id -> {
             Project project = projectMapper.selectByPrimaryKey(id);
-            String name = project.getName();
-            List<TestCaseNodeDTO> nodeList = getNodeDTO(id, planId);
-            TestCaseNodeDTO testCaseNodeDTO = new TestCaseNodeDTO();
-            testCaseNodeDTO.setId(project.getId());
-            testCaseNodeDTO.setName(name);
-            testCaseNodeDTO.setLabel(name);
-            testCaseNodeDTO.setChildren(nodeList);
-            list.add(testCaseNodeDTO);
+            if (project != null) {
+                String name = project.getName();
+                List<TestCaseNodeDTO> nodeList = getNodeDTO(id, planId);
+                TestCaseNodeDTO testCaseNodeDTO = new TestCaseNodeDTO();
+                testCaseNodeDTO.setId(project.getId());
+                testCaseNodeDTO.setName(name);
+                testCaseNodeDTO.setLabel(name);
+                testCaseNodeDTO.setChildren(nodeList);
+                if (!CollectionUtils.isEmpty(nodeList)) {
+                    list.add(testCaseNodeDTO);
+                }
+            }
         });
 
         return list;
@@ -195,10 +215,11 @@ public class TestCaseNodeService extends NodeTreeService<TestCaseNodeDTO> {
 
     public List<TestCaseNodeDTO> getNodeByReviewId(String reviewId) {
         List<TestCaseNodeDTO> list = new ArrayList<>();
-        TestCaseReview testCaseReview = new TestCaseReview();
-        testCaseReview.setId(reviewId);
-        List<Project> project = testCaseReviewService.getProjectByReviewId(testCaseReview);
-        List<String> projectIds = project.stream().map(Project::getId).collect(Collectors.toList());
+        ProjectExample example = new ProjectExample();
+        example.createCriteria().andWorkspaceIdEqualTo(SessionUtils.getCurrentWorkspaceId());
+        List<Project> projects = projectMapper.selectByExample(example);
+        List<String> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
+
         projectIds.forEach(id -> {
             String name = projectMapper.selectByPrimaryKey(id).getName();
 
@@ -208,11 +229,14 @@ public class TestCaseNodeService extends NodeTreeService<TestCaseNodeDTO> {
             List<String> caseIds = testCaseReviewTestCases.stream().map(TestCaseReviewTestCase::getCaseId).collect(Collectors.toList());
 
             List<TestCaseNodeDTO> nodeList = getReviewNodeDTO(id, caseIds);
-            TestCaseNodeDTO testCaseNodeDTO = new TestCaseNodeDTO();
-            testCaseNodeDTO.setName(name);
-            testCaseNodeDTO.setLabel(name);
-            testCaseNodeDTO.setChildren(nodeList);
-            list.add(testCaseNodeDTO);
+            if (!CollectionUtils.isEmpty(nodeList)) {
+                TestCaseNodeDTO testCaseNodeDTO = new TestCaseNodeDTO();
+                testCaseNodeDTO.setName(name);
+                testCaseNodeDTO.setLabel(name);
+                testCaseNodeDTO.setChildren(nodeList);
+                testCaseNodeDTO.setProjectId(id);
+                list.add(testCaseNodeDTO);
+            }
         });
         return list;
 
@@ -313,13 +337,15 @@ public class TestCaseNodeService extends NodeTreeService<TestCaseNodeDTO> {
 
     public List<TestCaseNodeDTO> getAllNodeByPlanId(QueryNodeRequest request) {
         String planId = request.getTestPlanId();
-        String projectId = request.getProjectId();
         TestPlan testPlan = testPlanMapper.selectByPrimaryKey(planId);
         if (testPlan == null) {
             return Collections.emptyList();
         }
+        return getAllNodeByProjectId(request);
+    }
 
-        return getNodeTreeByProjectId(projectId);
+    public List<TestCaseNodeDTO> getAllNodeByProjectId(QueryNodeRequest request) {
+        return getNodeTreeByProjectId(request.getProjectId());
     }
 
     public List<TestCaseNodeDTO> getAllNodeByReviewId(QueryNodeRequest request) {
@@ -402,6 +428,10 @@ public class TestCaseNodeService extends NodeTreeService<TestCaseNodeDTO> {
         List<TestCaseDTO> testCases = QueryTestCaseByNodeIds(nodeIds);
 
         TestCaseNodeDTO nodeTree = request.getNodeTree();
+
+        if (nodeTree == null) {
+            return;
+        }
 
         List<TestCaseNode> updateNodes = new ArrayList<>();
 

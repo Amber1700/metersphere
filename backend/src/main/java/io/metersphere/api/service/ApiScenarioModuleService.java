@@ -46,10 +46,6 @@ public class ApiScenarioModuleService extends NodeTreeService<ApiScenarioModuleD
     @Resource
     TestPlanProjectService testPlanProjectService;
     @Resource
-    private ApiTestCaseService apiTestCaseService;
-    @Resource
-    private ApiDefinitionService apiDefinitionService;
-    @Resource
     private ProjectService projectService;
 
     public ApiScenarioModuleService() {
@@ -57,6 +53,22 @@ public class ApiScenarioModuleService extends NodeTreeService<ApiScenarioModuleD
     }
 
     public List<ApiScenarioModuleDTO> getNodeTreeByProjectId(String projectId) {
+        // 判断当前项目下是否有默认模块，没有添加默认模块
+        ApiScenarioModuleExample example = new ApiScenarioModuleExample();
+        example.createCriteria().andProjectIdEqualTo(projectId).andNameEqualTo("默认模块");
+        long count = apiScenarioModuleMapper.countByExample(example);
+        if (count <= 0) {
+            ApiScenarioModule record = new ApiScenarioModule();
+            record.setId(UUID.randomUUID().toString());
+            record.setName("默认模块");
+            record.setPos(1.0);
+            record.setLevel(1);
+            record.setCreateTime(System.currentTimeMillis());
+            record.setUpdateTime(System.currentTimeMillis());
+            record.setProjectId(projectId);
+            apiScenarioModuleMapper.insert(record);
+        }
+
         List<ApiScenarioModuleDTO> nodes = extApiScenarioModuleMapper.getNodeTreeByProjectId(projectId);
         return getNodeTrees(nodes);
     }
@@ -104,7 +116,9 @@ public class ApiScenarioModuleService extends NodeTreeService<ApiScenarioModuleD
             scenarioModuleDTO.setName(name);
             scenarioModuleDTO.setLabel(name);
             scenarioModuleDTO.setChildren(nodeList);
-            list.add(scenarioModuleDTO);
+            if (!org.springframework.util.CollectionUtils.isEmpty(nodeList)) {
+                list.add(scenarioModuleDTO);
+            }
         });
         return list;
     }
@@ -176,18 +190,18 @@ public class ApiScenarioModuleService extends NodeTreeService<ApiScenarioModuleD
         request.setUpdateTime(System.currentTimeMillis());
         checkApiScenarioModuleExist(request);
         List<ApiScenarioDTO> apiScenarios = queryByModuleIds(request);
-
         apiScenarios.forEach(apiScenario -> {
             StringBuilder path = new StringBuilder(apiScenario.getModulePath());
             List<String> pathLists = Arrays.asList(path.toString().split("/"));
-            pathLists.set(request.getLevel(), request.getName());
-            path.delete(0, path.length());
-            for (int i = 1; i < pathLists.size(); i++) {
-                path.append("/").append(pathLists.get(i));
+            if (pathLists.size() > request.getLevel()) {
+                pathLists.set(request.getLevel(), request.getName());
+                path.delete(0, path.length());
+                for (int i = 1; i < pathLists.size(); i++) {
+                    path.append("/").append(pathLists.get(i));
+                }
+                apiScenario.setModulePath(path.toString());
             }
-            apiScenario.setModulePath(path.toString());
         });
-
         batchUpdateApiScenario(apiScenarios);
 
         return apiScenarioModuleMapper.updateByPrimaryKeySelective(request);
@@ -213,6 +227,33 @@ public class ApiScenarioModuleService extends NodeTreeService<ApiScenarioModuleD
         ApiScenarioModule module = apiScenarioModuleMapper.selectByPrimaryKey(id);
         ApiScenarioModuleDTO dto = JSON.parseObject(JSON.toJSONString(module), ApiScenarioModuleDTO.class);
         return dto;
+    }
+
+    public ApiScenarioModule getNewModule(String name, String projectId, int level) {
+        ApiScenarioModule node = new ApiScenarioModule();
+        node.setCreateTime(System.currentTimeMillis());
+        node.setUpdateTime(System.currentTimeMillis());
+        node.setId(UUID.randomUUID().toString());
+        node.setLevel(level);
+        node.setName(name);
+        node.setProjectId(projectId);
+        return node;
+    }
+
+    public List<ApiScenarioModule> selectSameModule(ApiScenarioModule node) {
+        ApiScenarioModuleExample example = new ApiScenarioModuleExample();
+        ApiScenarioModuleExample.Criteria criteria = example.createCriteria();
+        criteria.andNameEqualTo(node.getName())
+                .andProjectIdEqualTo(node.getProjectId());
+        if (StringUtils.isNotBlank(node.getParentId())) {
+            criteria.andParentIdEqualTo(node.getParentId());
+        } else {
+            criteria.andParentIdIsNull();
+        }
+        if (StringUtils.isNotBlank(node.getId())) {
+            criteria.andIdNotEqualTo(node.getId());
+        }
+        return apiScenarioModuleMapper.selectByExample(example);
     }
 
     @Override

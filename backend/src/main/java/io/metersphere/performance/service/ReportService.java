@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import io.metersphere.base.domain.*;
 import io.metersphere.base.mapper.*;
+import io.metersphere.base.mapper.ext.ExtFileContentMapper;
 import io.metersphere.base.mapper.ext.ExtLoadTestReportMapper;
 import io.metersphere.commons.constants.PerformanceTestStatus;
 import io.metersphere.commons.constants.ReportKeys;
@@ -23,11 +24,15 @@ import io.metersphere.performance.engine.EngineFactory;
 import io.metersphere.service.FileService;
 import io.metersphere.service.TestResourceService;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +57,10 @@ public class ReportService {
     private LoadTestReportDetailMapper loadTestReportDetailMapper;
     @Resource
     private FileService fileService;
+    @Resource
+    private SqlSessionFactory sqlSessionFactory;
+    @Resource
+    private TestResourcePoolMapper testResourcePoolMapper;
 
     public List<ReportDTO> getRecentReportList(ReportRequest request) {
         List<OrderRequest> orders = new ArrayList<>();
@@ -60,13 +69,11 @@ public class ReportService {
         orderRequest.setType("desc");
         orders.add(orderRequest);
         request.setOrders(orders);
-        request.setProjectId(SessionUtils.getCurrentProjectId());
         return extLoadTestReportMapper.getReportList(request);
     }
 
     public List<ReportDTO> getReportList(ReportRequest request) {
         request.setOrders(ServiceUtils.getDefaultOrder(request.getOrders()));
-        request.setProjectId(SessionUtils.getCurrentProjectId());
         return extLoadTestReportMapper.getReportList(request);
     }
 
@@ -284,11 +291,42 @@ public class ReportService {
         return JSON.parseArray(content, ChartsData.class);
     }
 
-    public byte[] downloadJtl(String reportId) {
+    /**
+     * 流下载 jtl zip
+     */
+    public void downloadJtlZip(String reportId, HttpServletResponse response) {
         LoadTestReportWithBLOBs report = getReport(reportId);
         if (StringUtils.isBlank(report.getFileId())) {
             throw new RuntimeException(Translator.get("load_test_report_file_not_exist"));
         }
-        return fileService.loadFileAsBytes(report.getFileId());
+        response.setHeader("Content-Disposition", "attachment;fileName=" + reportId + ".zip");
+        try (SqlSession sqlSession = sqlSessionFactory.openSession()) {
+            ExtFileContentMapper mapper = sqlSession.getMapper(ExtFileContentMapper.class);
+            try (InputStream inputStream = mapper.selectZipBytes(report.getFileId())) {
+                ServletOutputStream outputStream = response.getOutputStream();
+                byte[] buffer = new byte[1024 * 4];
+                int read;
+                while ((read = inputStream.read(buffer)) > -1) {
+                    outputStream.write(buffer, 0, read);
+                }
+            } catch (Exception e) {
+                LogUtil.error(e);
+                MSException.throwException(e);
+            }
+        }
+    }
+
+    public String getPoolTypeByReportId(String reportId) {
+        LoadTestReportWithBLOBs report = getReport(reportId);
+        String testId = report.getTestId();
+        LoadTestWithBLOBs test = loadTestMapper.selectByPrimaryKey(testId);
+        if (test != null) {
+            String poolId = test.getTestResourcePoolId();
+            TestResourcePool testResourcePool = testResourcePoolMapper.selectByPrimaryKey(poolId);
+            if (testResourcePool != null) {
+                return testResourcePool.getType();
+            }
+        }
+        return "";
     }
 }

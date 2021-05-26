@@ -38,35 +38,35 @@
     <api-environment-config ref="environmentConfig" @close="environmentConfigClose"/>
     <!-- 执行组件 -->
     <ms-run :debug="false" :environment="api.environment" :reportId="reportId" :run-data="runData"
-            @runRefresh="runRefresh" ref="runTest"/>
+            @runRefresh="runRefresh" @errorRefresh="errorRefresh" ref="runTest"/>
 
   </div>
 </template>
 
 <script>
-  import {downloadFile, getUUID} from "@/common/js/utils";
-  import MsApiCaseList from "../case/ApiCaseList";
-  import MsContainer from "../../../../common/components/MsContainer";
-  import MsBottomContainer from "../BottomContainer";
-  import {parseEnvironment} from "../../model/EnvironmentModel";
-  import ApiEnvironmentConfig from "../environment/ApiEnvironmentConfig";
-  import MsRequestResultTail from "../response/RequestResultTail";
-  import MsRun from "../Run";
-  import MsBasisParameters from "../request/database/BasisParameters";
-  import {REQ_METHOD} from "../../model/JsonData";
-  import MsJmxStep from "../step/JmxStep";
+import {getUUID} from "@/common/js/utils";
+import MsApiCaseList from "../case/ApiCaseList";
+import MsContainer from "../../../../common/components/MsContainer";
+import MsBottomContainer from "../BottomContainer";
+import {parseEnvironment} from "../../model/EnvironmentModel";
+import ApiEnvironmentConfig from "../environment/ApiEnvironmentConfig";
+import MsRequestResultTail from "../response/RequestResultTail";
+import MsRun from "../Run";
+import MsBasisParameters from "../request/database/BasisParameters";
+import {REQ_METHOD} from "../../model/JsonData";
+import MsJmxStep from "../step/JmxStep";
 
-  export default {
-    name: "RunTestSQLPage",
-    components: {
-      MsApiCaseList,
-      MsContainer,
-      MsBottomContainer,
-      MsRequestResultTail,
-      ApiEnvironmentConfig,
-      MsRun,
-      MsBasisParameters,
-      MsJmxStep
+export default {
+  name: "RunTestSQLPage",
+  components: {
+    MsApiCaseList,
+    MsContainer,
+    MsBottomContainer,
+    MsRequestResultTail,
+    ApiEnvironmentConfig,
+    MsRun,
+    MsBasisParameters,
+    MsJmxStep
     },
     data() {
       return {
@@ -107,6 +107,9 @@
       },
       refresh(){
         this.$emit('refresh');
+      },
+      errorRefresh(){
+        this.loading = false;
       },
       runTest() {
         this.loading = true;
@@ -160,12 +163,15 @@
       },
       saveAsApi() {
         let data = {};
-        data.request = JSON.stringify(this.api.request);
+        let req = this.api.request;
+        req.id = getUUID();
+        data.request = JSON.stringify(req);
         data.method = this.api.method;
         data.status = this.api.status;
         data.userId = this.api.userId;
         data.description = this.api.description;
         this.$emit('saveAsApi', data);
+        this.$emit('refresh');
       },
       updateApi() {
         let url = "/api/definition/update";
@@ -175,7 +181,7 @@
           if (this.syncTabs.indexOf(this.api.id) === -1) {
             this.syncTabs.push(this.api.id);
           }
-          this.$emit('saveApi', this.api);
+          this.$emit('refresh');
         });
       },
       selectTestCase(item) {

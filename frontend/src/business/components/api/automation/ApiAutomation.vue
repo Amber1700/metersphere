@@ -1,13 +1,17 @@
 <template>
-  <ms-container v-if="renderComponent">
+  <ms-container v-if="renderComponent" v-loading="loading">
     <ms-aside-container>
       <ms-api-scenario-module
+        :show-operator="true"
         @nodeSelectEvent="nodeChange"
         @refreshTable="refresh"
         @saveAsEdit="editScenario"
         @setModuleOptions="setModuleOptions"
         @setNodeTree="setNodeTree"
         @enableTrash="enableTrash"
+        @exportAPI="exportAPI"
+        @exportJmx="exportJmx"
+        @refreshAll="refreshAll"
         :type="'edit'"
         ref="nodeTree"/>
     </ms-aside-container>
@@ -22,9 +26,11 @@
             :trash-enable="trashEnable"
             :checkRedirectID="checkRedirectID"
             :isRedirectEdit="isRedirectEdit"
+            :is-read-only="isReadOnly"
             @openScenario="editScenario"
             @edit="editScenario"
             @changeSelectDataRangeAll="changeSelectDataRangeAll"
+            :custom-num="customNum"
             ref="apiScenarioList"/>
         </el-tab-pane>
 
@@ -35,8 +41,8 @@
           :name="item.name"
           closable>
           <div class="ms-api-scenario-div">
-            <ms-edit-api-scenario @refresh="refresh" :currentScenario="item.currentScenario"
-                                  :moduleOptions="moduleOptions" ref="autoScenarioConfig"/>
+            <ms-edit-api-scenario @refresh="refresh" @openScenario="editScenario" @closePage="closePage" :currentScenario="item.currentScenario"
+                                  :custom-num="customNum" :moduleOptions="moduleOptions" ref="autoScenarioConfig"/>
           </div>
         </el-tab-pane>
 
@@ -63,10 +69,9 @@
   import MsAsideContainer from "@/business/components/common/components/MsAsideContainer";
   import MsMainContainer from "@/business/components/common/components/MsMainContainer";
   import MsApiScenarioList from "@/business/components/api/automation/scenario/ApiScenarioList";
-  import {getUUID} from "@/common/js/utils";
+  import {getUUID, downloadFile, checkoutTestManagerOrTestUser, getCurrentUser} from "@/common/js/utils";
   import MsApiScenarioModule from "@/business/components/api/automation/scenario/ApiScenarioModule";
   import MsEditApiScenario from "./scenario/EditApiScenario";
-  import {getCurrentProjectID} from "../../../../common/js/utils";
 
   export default {
     name: "ApiAutomation",
@@ -89,7 +94,13 @@
         let redirectParam = this.$route.params.dataSelectRange;
         this.checkRedirectEditPage(redirectParam);
         return redirectParam;
-      }
+      },
+      isReadOnly() {
+        return !checkoutTestManagerOrTestUser();
+      },
+      projectId() {
+        return this.$store.state.projectId
+      },
     },
     data() {
       return {
@@ -101,10 +112,16 @@
         currentModule: null,
         moduleOptions: [],
         tabs: [],
+        loading: false,
         trashEnable: false,
         selectNodeIds: [],
-        nodeTree: []
+        nodeTree: [],
+        currentModulePath: "",
+        customNum: false
       }
+    },
+    mounted() {
+      this.getProject();
     },
     watch: {
       redirectID() {
@@ -117,21 +134,29 @@
       '$route'(to, from) {  //  路由改变时，把接口定义界面中的 ctrl s 保存快捷键监听移除
         if (to.path.indexOf('/api/automation') == -1) {
           if (this.$refs && this.$refs.autoScenarioConfig) {
-            console.log(this.$refs.autoScenarioConfig);
             this.$refs.autoScenarioConfig.forEach(item => {
               item.removeListener();
             });
           }
         }
+      },
+      selectNodeIds() {
+        this.activeName = "default";
       }
     },
     methods: {
+      exportAPI() {
+        this.$refs.apiScenarioList.exportApi();
+      },
+      exportJmx() {
+        this.$refs.apiScenarioList.exportJmx();
+      },
       checkRedirectEditPage(redirectParam) {
         if (redirectParam != null) {
           let selectParamArr = redirectParam.split("edit:");
           if (selectParamArr.length == 2) {
             let scenarioId = selectParamArr[1];
-            let projectId = getCurrentProjectID();
+            let projectId = this.projectId;
             //查找单条数据，跳转修改页面
             let url = "/api/automation/list/" + 1 + "/" + 1;
             this.$post(url, {id: scenarioId, projectId: projectId}, response => {
@@ -151,26 +176,61 @@
       },
       changeRedirectParam(redirectIDParam) {
         this.redirectID = redirectIDParam;
-        if(redirectIDParam!=null){
-          if(this.redirectFlag == "none"){
+        if (redirectIDParam != null) {
+          if (this.redirectFlag == "none") {
             this.activeName = "default";
             this.addListener();
             this.redirectFlag = "redirected";
           }
-        }else{
+        } else {
           this.redirectFlag = "none";
         }
       },
+      getPath(id, arr) {
+        if (id === null) {
+          return null;
+        }
+        if(arr) {
+          arr.forEach(item => {
+            if (item.id === id) {
+              this.currentModulePath = item.path;
+            }
+            if (item.children && item.children.length > 0) {
+              this.getPath(id, item.children);
+            }
+          });
+        }
+      },
       addTab(tab) {
-        if (!getCurrentProjectID()) {
+        if (tab.name === 'default') {
+          this.$refs.apiScenarioList.search();
+        }
+        if (!this.projectId) {
           this.$warning(this.$t('commons.check_project_tip'));
           return;
         }
+        this.currentModulePath = "";
         if (tab.name === 'add') {
           let label = this.$t('api_test.automation.add_scenario');
           let name = getUUID().substring(0, 8);
           this.activeName = name;
-          this.tabs.push({label: label, name: name, currentScenario: {apiScenarioModuleId: "", id: getUUID()}});
+          let currentScenario = {
+            status: "Underway", principal: getCurrentUser().id,
+            apiScenarioModuleId: "default-module", id: getUUID(),
+            modulePath: "/" + this.$t("commons.module_title")
+          };
+          if (this.nodeTree && this.nodeTree.length > 0) {
+            currentScenario.apiScenarioModuleId = this.nodeTree[0].id;
+            this.getPath(this.nodeTree[0].id, this.moduleOptions);
+            currentScenario.modulePath = this.currentModulePath;
+          }
+
+          if (this.selectNodeIds && this.selectNodeIds.length > 0) {
+            currentScenario.apiScenarioModuleId = this.selectNodeIds[0];
+            this.getPath(this.selectNodeIds[0], this.moduleOptions);
+            currentScenario.modulePath = this.currentModulePath;
+          }
+          this.tabs.push({label: label, name: name, currentScenario: currentScenario});
         }
         if (tab.name === 'edit') {
           let label = this.$t('api_test.automation.add_scenario');
@@ -188,8 +248,8 @@
       },
       addListener() {
         let index = this.tabs.findIndex(item => item.name === this.activeName); //  找到当前选中tab的index
-        if(index != -1) {   //  为当前选中的tab添加监听
-          this.$nextTick(()=>{
+        if (index != -1) {   //  为当前选中的tab添加监听
+          this.$nextTick(() => {
             this.$refs.autoScenarioConfig[index].addListener();
           });
         }
@@ -210,6 +270,15 @@
           default:
             this.addTab({name: 'add'});
             break;
+        }
+      },
+      closePage(targetName) {
+        this.tabs = this.tabs.filter(tab => tab.label !== targetName);
+        if (this.tabs.length > 0) {
+          this.activeName = this.tabs[this.tabs.length - 1].name;
+          this.addListener(); //  自动切换当前标签时，也添加监听
+        } else {
+          this.activeName = "default"
         }
       },
       removeTab(targetName) {
@@ -240,6 +309,10 @@
         this.setTabTitle(data);
         this.$refs.apiScenarioList.search(data);
       },
+      refreshAll() {
+        this.$refs.nodeTree.list();
+        this.$refs.apiScenarioList.search();
+      },
       setTabTitle(data) {
         for (let index in this.tabs) {
           let tab = this.tabs[index];
@@ -267,11 +340,21 @@
       },
       enableTrash(data) {
         this.trashEnable = data;
+      },
+      getProject() {
+        this.$get("/project/get/" + this.projectId, result => {
+          let data = result.data;
+          if (data) {
+            this.customNum = data.scenarioCustomNum;
+          }
+        })
       }
     }
   }
 </script>
 
 <style scoped>
-
+  /deep/ .el-tabs__header {
+    margin: 0 0 0px;
+  }
 </style>

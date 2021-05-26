@@ -2,14 +2,14 @@
   <div></div>
 </template>
 <script>
-  import {getUUID, getCurrentProjectID} from "@/common/js/utils";
+import {getUUID, getCurrentProjectID, strMapToObj} from "@/common/js/utils";
   import {createComponent} from "../../definition/components/jmeter/components";
 
   export default {
     name: 'MsDebugRun',
     components: {},
     props: {
-      environment: String,
+      environment: Map,
       debug: Boolean,
       reportId: String,
       runData: Object,
@@ -67,6 +67,19 @@
             });
           }
         }
+        if (item && item.files) {
+          item.files.forEach(fileItem => {
+            if (fileItem.file) {
+              if (!fileItem.id) {
+                let fileId = getUUID().substring(0, 12);
+                fileItem.name = fileItem.file.name;
+                fileItem.id = fileId;
+              }
+              obj.bodyUploadIds.push(fileItem.id);
+              bodyUploadFiles.push(fileItem.file);
+            }
+          });
+        }
       },
       recursiveFile(arr, bodyUploadFiles, obj) {
         arr.forEach(item => {
@@ -86,6 +99,11 @@
             this.recursiveFile(item.hashTree, bodyUploadFiles, obj);
           }
         })
+        if (request.variables) {
+          request.variables.forEach(item => {
+            this.setFiles(item, bodyUploadFiles, obj);
+          })
+        }
         return bodyUploadFiles;
       },
       run() {
@@ -94,17 +112,20 @@
         threadGroup.hashTree = [];
         threadGroup.name = this.reportId;
         threadGroup.enableCookieShare = this.runData.enableCookieShare;
+        let map = this.environment;
+        this.runData.projectId = getCurrentProjectID();
         threadGroup.hashTree.push(this.runData);
         testPlan.hashTree.push(threadGroup);
-        let reqObj = {id: this.reportId, reportId: this.reportId, scenarioName: this.runData.name, scenarioId: this.runData.id, environmentId: this.environment, testElement: testPlan, projectId: getCurrentProjectID()};
+        let reqObj = {id: this.reportId, reportId: this.reportId, scenarioName: this.runData.name,
+          scenarioId: this.runData.id, testElement: testPlan, projectId: getCurrentProjectID(), environmentMap: strMapToObj(map)};
         let bodyFiles = this.getBodyUploadFiles(reqObj);
         let url = "/api/automation/run/debug";
         this.$fileUpload(url, null, bodyFiles, reqObj, response => {
           this.runId = response.data;
           this.$emit('runRefresh', {});
-        }, erro => {
+        }, error => {
         });
-      }
+      },
     }
   }
 </script>

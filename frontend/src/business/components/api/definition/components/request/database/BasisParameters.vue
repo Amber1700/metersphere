@@ -1,17 +1,17 @@
 <template>
-  <div>
+  <div v-loading="isReloadData">
     <el-row>
       <el-col :span="21" style="padding-bottom: 20px">
         <div style="border:1px #DCDFE6 solid; height: 100%;border-radius: 4px ;width: 100% ;margin: 20px">
           <el-form :model="request" :rules="rules" ref="request" label-width="100px" :disabled="isReadOnly" style="margin: 10px">
             <el-row>
               <el-col :span="8">
-                <el-form-item prop="environmentId" :label="$t('api_test.definition.request.run_env')">
+                <el-form-item prop="environmentId" div v-if="!isScenario" :label="$t('api_test.definition.request.run_env')">
                   <el-select v-model="request.environmentId" size="small" class="ms-htt-width"
                              :placeholder="$t('api_test.definition.request.run_env')"
                              @change="environmentChange" clearable>
                     <el-option v-for="(environment, index) in environments" :key="index"
-                               :label="environment.name + (environment.config.httpConfig.socket ? (': ' + environment.config.httpConfig.protocol + '://' + environment.config.httpConfig.socket) : '')"
+                               :label="environment.name"
                                :value="environment.id"/>
                     <el-button class="environment-button" size="small" type="primary" @click="openEnvironmentConfig">
                       {{ $t('api_test.environment.environment_config') }}
@@ -28,7 +28,7 @@
               </el-col>
               <el-col :span="8">
                 <el-form-item :label="$t('api_test.request.sql.dataSource')" prop="dataSourceId" style="margin-left: 10px">
-                  <el-select v-model="request.dataSourceId" size="small">
+                  <el-select v-model="request.dataSourceId" size="small" @change="reload">
                     <el-option v-for="(item, index) in databaseConfigsOptions" :key="index" :value="item.id" :label="item.name"/>
                   </el-select>
                 </el-form-item>
@@ -43,11 +43,11 @@
 
 
             <el-form-item :label="$t('api_test.request.sql.result_variable')" prop="resultVariable">
-              <el-input v-model="request.resultVariable" maxlength="300" show-word-limit size="small"/>
+              <el-input v-model="request.resultVariable" maxlength="500" show-word-limit size="small"/>
             </el-form-item>
 
             <el-form-item :label="$t('api_test.request.sql.variable_names')" prop="variableNames">
-              <el-input v-model="request.variableNames" maxlength="300" show-word-limit size="small"/>
+              <el-input v-model="request.variableNames" maxlength="500" show-word-limit size="small"/>
             </el-form-item>
 
             <el-tabs v-model="activeName">
@@ -63,24 +63,6 @@
             </el-tabs>
           </el-form>
         </div>
-        <!--<div v-if="showScript">-->
-        <!--<div v-for="row in request.hashTree" :key="row.id" v-loading="isReloadData" style="margin-left: 20px;width: 100%">-->
-        <!--&lt;!&ndash; 前置脚本 &ndash;&gt;-->
-        <!--<ms-jsr233-processor v-if="row.label ==='JSR223 PreProcessor'" @copyRow="copyRow" @remove="remove" :is-read-only="false" :title="$t('api_test.definition.request.pre_script')" style-type="color: #B8741A;background-color: #F9F1EA"-->
-        <!--:jsr223-processor="row"/>-->
-        <!--&lt;!&ndash;后置脚本&ndash;&gt;-->
-        <!--<ms-jsr233-processor v-if="row.label ==='JSR223 PostProcessor'" @copyRow="copyRow" @remove="remove" :is-read-only="false" :title="$t('api_test.definition.request.post_script')" style-type="color: #783887;background-color: #F2ECF3"-->
-        <!--:jsr223-processor="row"/>-->
-        <!--&lt;!&ndash;断言规则&ndash;&gt;-->
-        <!--<div style="margin-top: 10px">-->
-        <!--<ms-api-assertions v-if="row.type==='Assertions'" @copyRow="copyRow" @remove="remove" :is-read-only="isReadOnly" :assertions="row"/>-->
-        <!--</div>-->
-        <!--&lt;!&ndash;提取规则&ndash;&gt;-->
-        <!--<div style="margin-top: 10px">-->
-        <!--<ms-api-extract :is-read-only="isReadOnly" @copyRow="copyRow" @remove="remove" v-if="row.type==='Extract'" :extract="row"/>-->
-        <!--</div>-->
-        <!--</div>-->
-        <!--</div>-->
       </el-col>
       <el-col :span="3" class="ms-left-cell" v-if="showScript">
 
@@ -126,6 +108,11 @@
       request: {},
       basisData: {},
       moduleOptions: Array,
+      environment: {},//来自场景选择的环境
+      isScenario: {
+        type: Boolean,
+        default: false,
+      },
       showScript: {
         type: Boolean,
         default: true,
@@ -138,22 +125,37 @@
     data() {
       return {
         environments: [],
+        currentEnvironment: {},
         databaseConfigsOptions: [],
         isReloadData: false,
         activeName: "variables",
         rules: {
-          environmentId: [{required: true, message: this.$t('api_test.definition.request.run_env'), trigger: 'change'}],
-          dataSourceId: [{required: true, message: this.$t('api_test.request.sql.dataSource'), trigger: 'change'}],
+
         },
       }
     },
     watch: {
       'request.dataSourceId'() {
         this.setDataSource();
+      },
+      environment: {
+        handler: function () {
+          this.initDataSource();
+        },
+        deep: true
       }
     },
     created() {
-      this.getEnvironments();
+      if(this.isScenario){
+        this.initDataSource();
+      }else{
+        this.getEnvironments();
+      }
+    },
+    computed: {
+      projectId() {
+        return this.$store.state.projectId
+      },
     },
     methods: {
       addPre() {
@@ -207,10 +209,10 @@
       runTest() {
 
       },
-
       getEnvironments() {
         this.environments = [];
-        this.$get('/api/environment/list/' + getCurrentProjectID(), response => {
+        let id = this.request.projectId ? this.request.projectId : this.projectId;
+        this.$get('/api/environment/list/' + id, response => {
           this.environments = response.data;
           this.environments.forEach(environment => {
             parseEnvironment(environment);
@@ -236,20 +238,35 @@
       },
       initDataSource() {
         let flag = false;
-        for (let i in this.environments) {
-          if (this.environments[i].id === this.request.environmentId) {
-            this.databaseConfigsOptions = [];
-            this.environments[i].config.databaseConfigs.forEach(item => {
-              if (item.id === this.request.dataSourceId) {
-                flag = true;
+        if (this.isScenario && this.environment) {
+          this.request.environmentId = this.environment.id;
+          this.databaseConfigsOptions = [];
+          if (this.environment.config) {
+            let config = JSON.parse(this.environment.config);
+            config.databaseConfigs.forEach(item => {
+              if (item.id !== this.request.dataSourceId) {
+                this.request.dataSourceId = item.id;
               }
+              flag = true;
               this.databaseConfigsOptions.push(item);
             });
-            break;
+          }
+        } else {
+          for (let i in this.environments) {
+            if (this.environments[i].id === this.request.environmentId) {
+              this.databaseConfigsOptions = [];
+              this.environments[i].config.databaseConfigs.forEach(item => {
+                if (item.id === this.request.dataSourceId) {
+                  flag = true;
+                }
+                this.databaseConfigsOptions.push(item);
+              });
+              break;
+            }
           }
         }
         if (!flag) {
-          this.request.dataSourceId = undefined;
+          this.request.dataSourceId = "";
         }
       },
       setDataSource() {

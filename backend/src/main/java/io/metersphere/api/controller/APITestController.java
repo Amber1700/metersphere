@@ -1,5 +1,6 @@
 package io.metersphere.api.controller;
 
+import com.alibaba.fastjson.JSONObject;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import io.metersphere.api.dto.*;
@@ -10,46 +11,30 @@ import io.metersphere.api.dto.datacount.response.ApiDataCountDTO;
 import io.metersphere.api.dto.datacount.response.ExecutedCaseInfoDTO;
 import io.metersphere.api.dto.datacount.response.TaskInfoResult;
 import io.metersphere.api.dto.definition.RunDefinitionRequest;
-import io.metersphere.api.dto.definition.request.MsTestElement;
+import io.metersphere.api.dto.definition.request.ParameterConfig;
+import io.metersphere.api.dto.scenario.environment.EnvironmentConfig;
 import io.metersphere.api.dto.scenario.request.dubbo.RegistryCenter;
 import io.metersphere.api.service.*;
-import io.metersphere.base.domain.ApiDefinition;
-import io.metersphere.base.domain.ApiTest;
-import io.metersphere.base.domain.LoadTest;
-import io.metersphere.base.domain.Schedule;
-import io.metersphere.commons.constants.PerformanceTestStatus;
+import io.metersphere.base.domain.*;
 import io.metersphere.commons.constants.RoleConstants;
 import io.metersphere.commons.constants.ScheduleGroup;
-import io.metersphere.commons.utils.CronUtils;
-import io.metersphere.commons.utils.PageUtils;
-import io.metersphere.commons.utils.Pager;
-import io.metersphere.commons.utils.SessionUtils;
+import io.metersphere.commons.utils.*;
 import io.metersphere.controller.request.QueryScheduleRequest;
+import io.metersphere.controller.request.ScheduleRequest;
 import io.metersphere.dto.ScheduleDao;
 import io.metersphere.performance.service.PerformanceTestService;
 import io.metersphere.service.CheckPermissionService;
-import io.metersphere.service.FileService;
 import io.metersphere.service.ScheduleService;
-import io.metersphere.track.request.testplan.SaveTestPlanRequest;
-import org.apache.http.entity.ContentType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.jorphan.collections.HashTree;
 import org.apache.shiro.authz.annotation.Logical;
 import org.apache.shiro.authz.annotation.RequiresRoles;
-import org.dom4j.Document;
-import org.dom4j.DocumentException;
-import org.dom4j.DocumentHelper;
-import org.dom4j.Element;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 import static io.metersphere.commons.utils.JsonPathUtils.getListJson;
 
@@ -82,6 +67,8 @@ public class APITestController {
     private CheckPermissionService checkPermissionService;
     @Resource
     private HistoricalDataUpgradeService historicalDataUpgradeService;
+    @Resource
+    private ApiTestEnvironmentService environmentService;
 
     @GetMapping("recent/{count}")
     public List<APITestResult> recentTest(@PathVariable int count) {
@@ -118,7 +105,7 @@ public class APITestController {
     }
 
     @PostMapping(value = "/schedule/create")
-    public void createSchedule(@RequestBody Schedule request) {
+    public void createSchedule(@RequestBody ScheduleRequest request) {
         apiTestService.createSchedule(request);
     }
 
@@ -212,19 +199,19 @@ public class APITestController {
         //查询完成率、进行中、已完成
         List<ApiDataCountResult> countResultByStatelList = apiDefinitionService.countStateByProjectID(projectId);
         apiCountResult.countStatus(countResultByStatelList);
-        long allCount = apiCountResult.getFinishedCount()+apiCountResult.getRunningCount()+apiCountResult.getNotStartedCount();
+        long allCount = apiCountResult.getFinishedCount() + apiCountResult.getRunningCount() + apiCountResult.getNotStartedCount();
 
-        if(allCount!=0){
-            float complateRageNumber =(float)apiCountResult.getFinishedCount()*100/allCount;
+        if (allCount != 0) {
+            float complateRageNumber = (float) apiCountResult.getFinishedCount() * 100 / allCount;
             DecimalFormat df = new DecimalFormat("0.0");
-            apiCountResult.setCompletionRage(df.format(complateRageNumber)+"%");
+            apiCountResult.setCompletionRage(df.format(complateRageNumber) + "%");
         }
 
-        apiCountResult.setHttpCountStr("HTTP&nbsp;&nbsp;<br/><br/>"+apiCountResult.getHttpApiDataCountNumber());
-        apiCountResult.setRpcCountStr("RPC&nbsp;&nbsp;<br/><br/>"+apiCountResult.getRpcApiDataCountNumber());
-        apiCountResult.setTcpCountStr("TCP&nbsp;&nbsp;<br/><br/>"+apiCountResult.getTcpApiDataCountNumber());
-        apiCountResult.setSqlCountStr("SQL&nbsp;&nbsp;<br/><br/>"+apiCountResult.getSqlApiDataCountNumber());
-        return  apiCountResult;
+        apiCountResult.setHttpCountStr("HTTP&nbsp;&nbsp;<br/><br/>" + apiCountResult.getHttpApiDataCountNumber());
+        apiCountResult.setRpcCountStr("RPC&nbsp;&nbsp;<br/><br/>" + apiCountResult.getRpcApiDataCountNumber());
+        apiCountResult.setTcpCountStr("TCP&nbsp;&nbsp;<br/><br/>" + apiCountResult.getTcpApiDataCountNumber());
+        apiCountResult.setSqlCountStr("SQL&nbsp;&nbsp;<br/><br/>" + apiCountResult.getSqlApiDataCountNumber());
+        return apiCountResult;
     }
 
     @GetMapping("/testCaseInfoCount/{projectId}")
@@ -245,28 +232,26 @@ public class APITestController {
         //未覆盖 已覆盖： 统计当前接口下是否含有案例
         List<ApiDataCountResult> countResultByApiCoverageList = apiDefinitionService.countApiCoverageByProjectID(projectId);
         apiCountResult.countApiCoverage(countResultByApiCoverageList);
-        long allCount = apiCountResult.getCoverageCount()+apiCountResult.getUncoverageCount();
+        long allCount = apiCountResult.getCoverageCount() + apiCountResult.getUncoverageCount();
 
-        if(allCount!=0){
-            float coverageRageNumber =(float)apiCountResult.getCoverageCount()*100/allCount;
+        if (allCount != 0) {
+            float coverageRageNumber = (float) apiCountResult.getCoverageCount() * 100 / allCount;
             DecimalFormat df = new DecimalFormat("0.0");
-            apiCountResult.setCoverageRage(df.format(coverageRageNumber)+"%");
+            apiCountResult.setCoverageRage(df.format(coverageRageNumber) + "%");
         }
 
 
-        apiCountResult.setHttpCountStr("HTTP&nbsp;&nbsp;<br/><br/>"+apiCountResult.getHttpApiDataCountNumber());
-        apiCountResult.setRpcCountStr("RPC&nbsp;&nbsp;<br/><br/>"+apiCountResult.getRpcApiDataCountNumber());
-        apiCountResult.setTcpCountStr("TCP&nbsp;&nbsp;<br/><br/>"+apiCountResult.getTcpApiDataCountNumber());
-        apiCountResult.setSqlCountStr("SQL&nbsp;&nbsp;<br/><br/>"+apiCountResult.getSqlApiDataCountNumber());
+        apiCountResult.setHttpCountStr("HTTP&nbsp;&nbsp;<br/><br/>" + apiCountResult.getHttpApiDataCountNumber());
+        apiCountResult.setRpcCountStr("RPC&nbsp;&nbsp;<br/><br/>" + apiCountResult.getRpcApiDataCountNumber());
+        apiCountResult.setTcpCountStr("TCP&nbsp;&nbsp;<br/><br/>" + apiCountResult.getTcpApiDataCountNumber());
+        apiCountResult.setSqlCountStr("SQL&nbsp;&nbsp;<br/><br/>" + apiCountResult.getSqlApiDataCountNumber());
 
-        return  apiCountResult;
+        return apiCountResult;
     }
 
     @GetMapping("/testSceneInfoCount/{projectId}")
     public ApiDataCountDTO testSceneInfoCount(@PathVariable String projectId) {
-
         ApiDataCountDTO apiCountResult = new ApiDataCountDTO();
-
         long scenarioCountNumber = apiAutomationService.countScenarioByProjectID(projectId);
         apiCountResult.setAllApiDataCountNumber(scenarioCountNumber);
 
@@ -285,17 +270,34 @@ public class APITestController {
         //未执行、未通过、已通过
         List<ApiDataCountResult> countResultByRunResult = apiAutomationService.countRunResultByProjectID(projectId);
         apiCountResult.countRunResult(countResultByRunResult);
-
         long allCount = apiCountResult.getUnexecuteCount() + apiCountResult.getExecutionPassCount() + apiCountResult.getExecutionFailedCount();
-
+        DecimalFormat df = new DecimalFormat("0.0");
         if (allCount != 0) {
+            //通过率
             float coverageRageNumber = (float) apiCountResult.getExecutionPassCount() * 100 / allCount;
-            DecimalFormat df = new DecimalFormat("0.0");
             apiCountResult.setPassRage(df.format(coverageRageNumber) + "%");
         }
-
         return apiCountResult;
+    }
 
+    @GetMapping("/countInterfaceCoverage/{projectId}")
+    public String countInterfaceCoverage(@PathVariable String projectId) {
+        String returnStr = "100%";
+        /**
+         * 接口覆盖率
+         * 复制的接口定义/复制或引用的单接口用例/ 添加的自定义请求 url 路径与现有的接口定义一致的请求
+         */
+        List<ApiScenarioWithBLOBs> allScenarioInfoList = apiAutomationService.selectIdAndScenarioByProjectId(projectId);
+        List<ApiDefinition> allEffectiveApiIdList = apiDefinitionService.selectEffectiveIdByProjectId(projectId);
+        List<ApiTestCase> allEffectiveApiCaseList = apiTestCaseService.selectEffectiveTestCaseByProjectId(projectId);
+        try {
+            float intetfaceCoverageRageNumber = apiAutomationService.countInterfaceCoverage(allScenarioInfoList, allEffectiveApiIdList, allEffectiveApiCaseList);
+            DecimalFormat df = new DecimalFormat("0.0");
+            returnStr = df.format(intetfaceCoverageRageNumber) + "%";
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        return  returnStr;
     }
 
     @GetMapping("/scheduleTaskInfoCount/{projectId}")
@@ -314,36 +316,32 @@ public class APITestController {
         apiCountResult.setThisWeekExecutedCount(executedInThisWeekCountNumber);
 
         //统计 失败 成功 以及总数
-//        List<ApiDataCountResult> api_allExecuteResult = apiReportService.countByProjectIdGroupByExecuteResult(projectId);
         List<ApiDataCountResult> allExecuteResult = apiScenarioReportService.countByProjectIdGroupByExecuteResult(projectId);
-//        List<ApiDataCountResult> allExecuteResult = new ArrayList<>();
-//        allExecuteResult.addAll(api_allExecuteResult);
-//        allExecuteResult.addAll(scene_allExecuteResult);
         apiCountResult.countScheduleExecute(allExecuteResult);
 
         long allCount = apiCountResult.getExecutedCount();
-        if(allCount!=0){
-            float coverageRageNumber =(float)apiCountResult.getSuccessCount()*100/allCount;
+        if (allCount != 0) {
+            float coverageRageNumber = (float) apiCountResult.getSuccessCount() * 100 / allCount;
             DecimalFormat df = new DecimalFormat("0.0");
-            apiCountResult.setSuccessRage(df.format(coverageRageNumber)+"%");
+            apiCountResult.setSuccessRage(df.format(coverageRageNumber) + "%");
         }
 
-        return  apiCountResult;
+        return apiCountResult;
     }
 
     @GetMapping("/faliureCaseAboutTestPlan/{projectId}/{limitNumber}")
     public List<ExecutedCaseInfoDTO> faliureCaseAboutTestPlan(@PathVariable String projectId, @PathVariable int limitNumber) {
 
-        List<ExecutedCaseInfoResult> selectDataList = apiDefinitionExecResultService.findFaliureCaseInfoByProjectIDAndLimitNumberInSevenDays(projectId,limitNumber);
+        List<ExecutedCaseInfoResult> selectDataList = apiDefinitionExecResultService.findFaliureCaseInfoByProjectIDAndLimitNumberInSevenDays(projectId, limitNumber);
 
         List<ExecutedCaseInfoDTO> returnList = new ArrayList<>(limitNumber);
 
-        for(int dataIndex = 0;dataIndex < limitNumber;dataIndex ++){
+        for (int dataIndex = 0; dataIndex < limitNumber; dataIndex++) {
 
             ExecutedCaseInfoDTO dataDTO = new ExecutedCaseInfoDTO();
-            dataDTO.setSortIndex(dataIndex+1);
+            dataDTO.setSortIndex(dataIndex + 1);
 
-            if(dataIndex<selectDataList.size()){
+            if (dataIndex < selectDataList.size()) {
                 ExecutedCaseInfoResult selectData = selectDataList.get(dataIndex);
                 dataDTO.setCaseID(selectData.getTestCaseID());
                 dataDTO.setCaseName(selectData.getCaseName());
@@ -351,29 +349,36 @@ public class APITestController {
                 dataDTO.setFailureTimes(selectData.getFailureTimes());
                 dataDTO.setCaseType(selectData.getCaseType());
                 dataDTO.setTestPlanDTOList(selectData.getTestPlanDTOList());
-            }else {
+            } else {
                 dataDTO.setCaseName("");
                 dataDTO.setTestPlan("");
             }
             returnList.add(dataDTO);
         }
-        return  returnList;
+        return returnList;
     }
 
-    @GetMapping("/runningTask/{projectID}")
-    public List<TaskInfoResult> runningTask(@PathVariable String projectID) {
-
-        List<TaskInfoResult> resultList = scheduleService.findRunningTaskInfoByProjectID(projectID);
+    @GetMapping("/runningTask/{projectID}/{callFrom}")
+    public List<TaskInfoResult> runningTask(@PathVariable String projectID, @PathVariable String callFrom) {
+        List<String> typeFilter = new ArrayList<>();
+        if (StringUtils.equals(callFrom, "api_test")) {   //  接口测试首页显示的运行中定时任务，只要这3种，不需要 性能测试、api_test(旧版)
+            typeFilter.add(ScheduleGroup.API_SCENARIO_TEST.name());
+            typeFilter.add(ScheduleGroup.SWAGGER_IMPORT.name());
+            typeFilter.add(ScheduleGroup.TEST_PLAN_TEST.name());
+        } else if (StringUtils.equals(callFrom, "track_home")) { //  测试跟踪首页只显示测试计划的定时任务
+            typeFilter.add(ScheduleGroup.TEST_PLAN_TEST.name());
+        }
+        List<TaskInfoResult> resultList = scheduleService.findRunningTaskInfoByProjectID(projectID, typeFilter);
         int dataIndex = 1;
         for (TaskInfoResult taskInfo :
                 resultList) {
             taskInfo.setIndex(dataIndex++);
             Date nextExecutionTime = CronUtils.getNextTriggerTime(taskInfo.getRule());
-            if(nextExecutionTime!=null){
+            if (nextExecutionTime != null) {
                 taskInfo.setNextExecutionTime(nextExecutionTime.getTime());
             }
         }
-        return  resultList;
+        return resultList;
     }
 
     @PostMapping(value = "/schedule/updateEnableByPrimyKey")
@@ -382,6 +387,7 @@ public class APITestController {
         schedule.setEnable(request.isEnable());
         apiAutomationService.updateSchedule(schedule);
     }
+
     @PostMapping(value = "/historicalDataUpgrade")
     public String historicalDataUpgrade(@RequestBody SaveHistoricalDataUpgrade request) {
         return historicalDataUpgradeService.upgrade(request);
@@ -389,37 +395,27 @@ public class APITestController {
 
     @PostMapping(value = "/genPerformanceTestXml", consumes = {"multipart/form-data"})
     public JmxInfoDTO genPerformanceTest(@RequestPart("request") RunDefinitionRequest runRequest, @RequestPart(value = "files") List<MultipartFile> bodyFiles) throws Exception {
-        HashTree hashTree = runRequest.getTestElement().generateHashTree();
+
+        ParameterConfig config = new ParameterConfig();
+        config.setProjectId(runRequest.getProjectId());
+
+        Map<String, EnvironmentConfig> envConfig = new HashMap<>();
+        Map<String, String> map = runRequest.getEnvironmentMap();
+        if (map != null && map.size() > 0) {
+            ApiTestEnvironmentWithBLOBs environment = environmentService.get(map.get(runRequest.getProjectId()));
+            EnvironmentConfig env = JSONObject.parseObject(environment.getConfig(), EnvironmentConfig.class);
+            envConfig.put(runRequest.getProjectId(), env);
+            config.setConfig(envConfig);
+        }
+        HashTree hashTree = runRequest.getTestElement().generateHashTree(config);
         String jmxString = runRequest.getTestElement().getJmx(hashTree);
 
         String testName = runRequest.getName();
 
-        try{
-            //将ThreadGroup的testname改为接口名称
-            Document doc = DocumentHelper.parseText(jmxString);// 获取可续保保单列表报文模板
-            Element root = doc.getRootElement();
-            Element rootHashTreeElement = root.element("hashTree");
-            Element innerHashTreeElement = rootHashTreeElement.elements("hashTree").get(0);
-            Element theadGroupElement = innerHashTreeElement.elements("ThreadGroup").get(0);
-            theadGroupElement.attribute("testname").setText(testName);
-
-            List<Element> thirdHashTreeElementList =innerHashTreeElement.elements("hashTree");
-            for (Element element:thirdHashTreeElementList) {
-                List<Element> sampleProxyElementList = element.elements("HTTPSamplerProxy");
-                for (Element itemElement: sampleProxyElementList) {
-                    itemElement.attribute("testname").setText(testName);
-                }
-            }
-
-            jmxString = root.asXML();
-        }catch (Exception e){
-            e.printStackTrace();
-        }
-
-        JmxInfoDTO dto = new JmxInfoDTO();
-        dto.setName(runRequest.getName()+".jmx");
-        dto.setXml(jmxString);
-        return  dto;
+        //将jmx处理封装为通用方法
+        JmxInfoDTO dto = apiTestService.updateJmxString(jmxString, testName, false);
+        dto.setName(runRequest.getName() + ".jmx");
+        return dto;
     }
 
 }

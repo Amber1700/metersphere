@@ -35,17 +35,20 @@
       if (!this.result) {
         this.getExecResult();
         if (this.apiItem.isActive) {
-          this.isActive = true;
+         // this.isActive = true;
         }
       } else {
         this.response = this.result;
-        this.isActive = true;
+        // this.isActive = true;
       }
     },
     watch: {
       result() {
         this.response = this.result;
         this.isActive = true;
+      },
+      apiItem(){
+        this.getExecResult();
       }
     },
     methods: {
@@ -58,6 +61,7 @@
               let data = JSON.parse(response.data.content);
               this.response = data;
               this.$set(this.apiItem, 'responseData', data);
+              this.isActive = true;
             }
           });
         }

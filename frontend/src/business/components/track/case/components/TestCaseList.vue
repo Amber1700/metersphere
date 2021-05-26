@@ -1,174 +1,150 @@
 <template>
 
-  <div class="card-container">
-    <el-card class="card-content" v-loading="result.loading">
-      <template v-slot:header>
+  <div class="card-container" v-loading="result.loading">
 
-        <ms-table-header :is-tester-permission="true" :condition.sync="condition" @search="initTableData"
-                         :tip="$t('commons.search_by_name_or_id')"
-                         :create-tip="$t('test_track.case.create')" @create="testCaseCreate">
-          <template v-slot:title>
-            <node-breadcrumb class="table-title" :nodes="selectParentNodes" @refresh="refresh"/>
-          </template>
-          <template v-slot:button>
-            <ms-table-button :is-tester-permission="true" icon="el-icon-download"
-                             :content="$t('test_track.case.import.import')" @click="importTestCase"/>
-            <ms-table-button :is-tester-permission="true" icon="el-icon-upload2"
-                             :content="$t('test_track.case.export.export')" @click="handleBatch('export')"/>
-          </template>
-        </ms-table-header>
+    <ms-table-header :is-tester-permission="true" :condition.sync="condition" @search="initTableData"
+                     :tip="$t('commons.search_by_name_or_id')" title="" :show-create="false"/>
+    <el-table
+      border
+      :data="tableData"
+      @sort-change="sort"
+      @filter-change="filter"
+      @select-all="handleSelectAll"
+      @select="handleSelect"
+      @header-dragend="headerDragend"
+      @cell-mouse-enter="showPopover"
+      :height="screenHeight"
+      row-key="id"
+      class="test-content adjust-table ms-select-all-fixed"
+      ref="table" @row-click="handleEdit">
+      <el-table-column
+        width="50"
+        type="selection"/>
 
-      </template>
+      <ms-table-header-select-popover v-show="total>0"
+                                      :page-size="pageSize > total ? total : pageSize"
+                                      :total="total"
+                                      :select-data-counts="selectDataCounts"
+                                      @selectPageAll="isSelectDataAll(false)"
+                                      @selectAll="isSelectDataAll(true)"/>
 
-      <test-case-import @refreshAll="refreshAll" ref="testCaseImport"/>
-
-      <el-table
-        border
-        :data="tableData"
-        @sort-change="sort"
-        @filter-change="filter"
-        @select-all="handleSelectAll"
-        @select="handleSelect"
-        @cell-mouse-enter="showPopover"
-        row-key="id"
-        class="test-content adjust-table ms-select-all-fixed"
-        ref="table" @row-click="handleEdit">
+      <el-table-column width="30" :resizable="false" align="center">
+        <template v-slot:default="scope">
+          <show-more-btn :is-show="scope.row.showMore" :buttons="buttons" :size="selectDataCounts"/>
+        </template>
+      </el-table-column>
+      <template v-for="(item, index) in tableLabel">
 
         <el-table-column
-          width="50"
-          type="selection"/>
-
-        <ms-table-header-select-popover v-show="total>0"
-          :page-size="pageSize > total ? total : pageSize"
-          :total="total"
-          @selectPageAll="isSelectDataAll(false)"
-          @selectAll="isSelectDataAll(true)"/>
-
-        <el-table-column width="40" :resizable="false" align="center">
-          <template v-slot:default="scope">
-            <show-more-btn :is-show="scope.row.showMore" :buttons="buttons" :size="selectDataCounts"/>
-          </template>
-        </el-table-column>
-        <el-table-column
+          v-if="item.id === 'num' && !customNum"
           prop="num"
           sortable="custom"
           :label="$t('commons.id')"
+          :key="index"
+          min-width="80"
           show-overflow-tooltip>
         </el-table-column>
         <el-table-column
+          v-if="item.id === 'num' && customNum"
+          prop="customNum"
+          sortable="custom"
+          :label="$t('commons.id')"
+          :key="index"
+          min-width="80"
+          show-overflow-tooltip>
+        </el-table-column>
+        <el-table-column
+          v-if="item.id == 'name'"
           prop="name"
           :label="$t('commons.name')"
           show-overflow-tooltip
+          :key="index"
+          min-width="120"
         >
-          <template v-slot:default="scope">
-            <!--<div @mouseover="showDetail(scope.row)">
-              <p>{{ scope.row.name }}</p>
-            </div>-->
-            <el-popover
-              placement="right-end"
-              :title="$t('test_track.case.view_case')"
-              trigger="hover"
-            >
-              <test-case-detail v-if="currentCaseId === scope.row.id" :test-case-id="currentCaseId"/>
-              <span slot="reference">{{ scope.row.name }}</span>
-            </el-popover>
-          </template>
         </el-table-column>
         <el-table-column
+          v-if="item.id == 'priority'"
           prop="priority"
           :filters="priorityFilters"
           column-key="priority"
-          min-width="100px"
+          sortable="custom"
+          min-width="120px"
           :label="$t('test_track.case.priority')"
-          show-overflow-tooltip>
+          show-overflow-tooltip
+          :key="index">
           <template v-slot:default="scope">
             <priority-table-item :value="scope.row.priority"/>
           </template>
         </el-table-column>
         <el-table-column
-          prop="type"
-          :filters="typeFilters"
-          column-key="type"
-          :label="$t('test_track.case.type')"
-          show-overflow-tooltip>
-          <template v-slot:default="scope">
-            <type-table-item :value="scope.row.type"/>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="method"
-          column-key="method"
-          :filters="methodFilters"
+          v-if="item.id=='reviewStatus'"
+          column-key="reviewStatus"
           min-width="100px"
-          :label="$t('test_track.case.method')"
-          show-overflow-tooltip>
-          <template v-slot:default="scope">
-            <method-table-item :value="scope.row.method"/>
-          </template>
-        </el-table-column>
-
-        <el-table-column
-          :filters="statusFilters"
-          column-key="status"
-          min-width="100px"
-          :label="$t('test_track.case.status')">
+          :label="$t('test_track.case.status')"
+          :key="index">
           <template v-slot:default="scope">
             <span class="el-dropdown-link">
               <review-status :value="scope.row.reviewStatus"/>
             </span>
           </template>
         </el-table-column>
-
-        <el-table-column prop="tags" :label="$t('commons.tag')">
+        <el-table-column v-if="item.id=='tags'" prop="tags" :label="$t('commons.tag')" min-width="80"  :key="index">
           <template v-slot:default="scope">
-            <div v-for="(itemName,index)  in scope.row.tags" :key="index">
-              <ms-tag type="success" effect="plain" :content="itemName"/>
-            </div>
+            <ms-tag v-for="(itemName,index)  in scope.row.tags" :key="index" type="success" effect="plain"
+                    :content="itemName" style="margin-left: 0px; margin-right: 2px"/>
           </template>
         </el-table-column>
 
         <el-table-column
+          v-if="item.id=='nodePath'"
           prop="nodePath"
           :label="$t('test_track.case.module')"
           min-width="150px"
-          show-overflow-tooltip>
+          show-overflow-tooltip
+          :key="index">
         </el-table-column>
 
         <el-table-column
+          v-if="item.id=='updateTime'"
           prop="updateTime"
           sortable="custom"
           :label="$t('commons.update_time')"
           min-width="150px"
-          show-overflow-tooltip>
+          show-overflow-tooltip
+          :key="index">
           <template v-slot:default="scope">
             <span>{{ scope.row.updateTime | timestampFormatDate }}</span>
           </template>
         </el-table-column>
-        <el-table-column fixed="right"
-          :label="$t('commons.operating')" min-width="150">
-          <template v-slot:default="scope">
-            <ms-table-operator :is-tester-permission="true" @editClick="handleEdit(scope.row)"
-                               @deleteClick="handleDelete(scope.row)">
-              <template v-slot:middle>
-                <ms-table-operator-button :is-tester-permission="true" :tip="$t('commons.copy')"
-                                          icon="el-icon-document-copy"
-                                          type="success" @exec="handleCopy(scope.row)"/>
-              </template>
-            </ms-table-operator>
-          </template>
-        </el-table-column>
-      </el-table>
+      </template>
+      <el-table-column fixed="right" min-width="120">
+        <template slot="header">
+          <header-label-operate @exec="customHeader"/>
+        </template>
+        <template v-slot:default="scope">
+          <ms-table-operator :is-tester-permission="true" @editClick="handleEdit(scope.row)"
+                             @deleteClick="handleDelete(scope.row)">
+            <template v-slot:middle>
+              <ms-table-operator-button :is-tester-permission="true" :tip="$t('commons.copy')"
+                                        icon="el-icon-document-copy"
+                                        type="success" @exec="handleCopy(scope.row)"/>
+            </template>
+          </ms-table-operator>
+        </template>
+      </el-table-column>
+      <header-custom ref="headerCustom" :initTableData="initTableData" :optionalFields=headerItems
+                     :type=type></header-custom>
+    </el-table>
 
-      <ms-table-pagination :change="initTableData" :current-page.sync="currentPage" :page-size.sync="pageSize"
-                           :total="total"/>
-
-    </el-card>
+    <ms-table-pagination :change="initTableData" :current-page.sync="currentPage" :page-size.sync="pageSize"
+                         :total="total"/>
 
     <batch-edit ref="batchEdit" @batchEdit="batchEdit"
                 :typeArr="typeArr" :value-arr="valueArr" :dialog-title="$t('test_track.case.batch_edit_case')"/>
 
     <batch-move @refresh="refresh" @moveSave="moveSave" ref="testBatchMove"/>
   </div>
+
 </template>
 
 <script>
@@ -186,23 +162,38 @@ import MethodTableItem from "../../common/tableItems/planview/MethodTableItem";
 import MsTableOperator from "../../../common/components/MsTableOperator";
 import MsTableOperatorButton from "../../../common/components/MsTableOperatorButton";
 import MsTableButton from "../../../common/components/MsTableButton";
-import {_filter, _sort} from "@/common/js/utils";
 import {TEST_CASE_CONFIGS} from "../../../common/components/search/search-components";
 import ShowMoreBtn from "./ShowMoreBtn";
 import BatchEdit from "./BatchEdit";
-import {WORKSPACE_ID} from "@/common/js/constants";
-import {LIST_CHANGE, TrackEvent} from "@/business/components/common/head/ListEvent";
+import {PROJECT_NAME, TEST_CASE_LIST, WORKSPACE_ID} from "@/common/js/constants";
 import StatusTableItem from "@/business/components/track/common/tableItems/planview/StatusTableItem";
 import TestCaseDetail from "./TestCaseDetail";
 import ReviewStatus from "@/business/components/track/case/components/ReviewStatus";
-import {getCurrentProjectID} from "../../../../../common/js/utils";
 import MsTag from "@/business/components/common/components/MsTag";
-import {_handleSelect, _handleSelectAll} from "../../../../../common/js/tableUtils";
+import {
+  _filter,
+  _handleSelect,
+  _handleSelectAll,
+  _sort,
+  buildBatchParam,
+  getLabel,
+  getSelectDataCounts,
+  initCondition,
+  setUnSelectIds,
+  toggleAllSelection
+} from "@/common/js/tableUtils";
 import BatchMove from "./BatchMove";
+import {Track_Test_Case} from "@/business/components/common/model/JsonData";
+import HeaderCustom from "@/business/components/common/head/HeaderCustom";
+import HeaderLabelOperate from "@/business/components/common/head/HeaderLabelOperate";
+import PlanStatusTableItem from "@/business/components/track/common/tableItems/plan/PlanStatusTableItem";
 
 export default {
   name: "TestCaseList",
   components: {
+    PlanStatusTableItem,
+    HeaderLabelOperate,
+    HeaderCustom,
     BatchMove,
     MsTableHeaderSelectPopover,
     MsTableButton,
@@ -226,6 +217,10 @@ export default {
   },
   data() {
     return {
+      type: TEST_CASE_LIST,
+      screenHeight: document.documentElement.clientHeight-310,
+      headerItems: Track_Test_Case,
+      tableLabel: [],
       result: {},
       deletePath: "/test/case/delete",
       condition: {
@@ -251,10 +246,15 @@ export default {
         {text: this.$t('commons.performance'), value: 'performance'},
         {text: this.$t('commons.api'), value: 'api'}
       ],
+      reviewStatusFilters: [
+        {text: this.$t('test_track.review.prepare'), value: 'Prepare'},
+        {text: this.$t('test_track.review.pass'), value: 'Pass'},
+        {text: this.$t('test_track.review.un_pass'), value: 'UnPass'},
+      ],
       statusFilters: [
-        {text: this.$t('test_track.case.status_prepare'), value: 'Prepare'},
-        {text: this.$t('test_track.case.status_pass'), value: 'Pass'},
-        {text: this.$t('test_track.case.status_un_pass'), value: 'UnPass'},
+        {text: '未开始', value: 'Prepare'},
+        {text: '进行中', value: 'Underway'},
+        {text: '已完成', value: 'Completed'},
       ],
       showMore: false,
       buttons: [
@@ -291,31 +291,48 @@ export default {
         maintainer: [],
       },
       currentCaseId: null,
-      projectId: "",
       selectDataCounts: 0,
+      selectDataRange: "all"
     }
   },
   props: {
-    selectNodeIds: {
-      type: Array
-    },
-    selectParentNodes: {
-      type: Array
-    },
     treeNodes: {
       type: Array
     },
-    moduleOptions: {
-      type: Array
+    trashEnable: {
+      type: Boolean,
+      default: false,
+    },
+    customNum: {
+      type: Boolean,
+      default: false
+    }
+  },
+  computed: {
+    projectId() {
+      return this.$store.state.projectId
+    },
+    selectNodeIds() {
+      return this.$store.state.testCaseSelectNodeIds;
+    },
+    moduleOptions() {
+      return this.$store.state.testCaseModuleOptions;
     }
   },
   created: function () {
     this.$emit('setCondition', this.condition);
+    this.condition.filters = {reviewStatus: ["Prepare", "Pass", "UnPass"]};
+    this.initTableData();
+
+  },
+  activated() {
+    this.condition.filters = {reviewStatus: ["Prepare", "Pass", "UnPass"]};
     this.initTableData();
   },
   watch: {
     selectNodeIds() {
       this.currentPage = 1;
+      initCondition(this.condition, false);
       this.initTableData();
     },
     condition() {
@@ -323,12 +340,19 @@ export default {
     }
   },
   methods: {
+    customHeader() {
+      this.$refs.headerCustom.open(this.tableLabel)
+    },
+    getSelectDataRange() {
+      let dataRange = this.$route.params.dataSelectRange;
+      let dataType = this.$route.params.dataType;
+      this.selectDataRange = dataType === 'case' ? dataRange : 'all';
+    },
     initTableData() {
-      this.projectId = getCurrentProjectID();
       this.condition.planId = "";
       this.condition.nodeIds = [];
-      this.condition.selectAll = false;
-      this.condition.unSelectIds = [];
+      //initCondition(this.condition);
+      initCondition(this.condition, this.condition.selectAll);
       this.selectDataCounts = 0;
       if (this.planId) {
         // param.planId = this.planId;
@@ -338,23 +362,86 @@ export default {
         // param.nodeIds = this.selectNodeIds;
         this.condition.nodeIds = this.selectNodeIds;
       }
+      getLabel(this, TEST_CASE_LIST);
+
       this.getData();
     },
     getData() {
+      this.getSelectDataRange();
+      this.condition.selectThisWeedData = false;
+      this.condition.selectThisWeedRelevanceData = false;
+      this.condition.caseCoverage = null;
+      switch (this.selectDataRange) {
+        case 'thisWeekCount':
+          this.condition.selectThisWeedData = true;
+          break;
+        case 'thisWeekRelevanceCount':
+          this.condition.selectThisWeedRelevanceData = true;
+          break;
+        case 'uncoverage':
+          this.condition.caseCoverage = 'uncoverage';
+          break;
+        case 'coverage':
+          this.condition.caseCoverage = 'coverage';
+          break;
+        case 'Prepare':
+          this.condition.filters.reviewStatus = [this.selectDataRange];
+          break;
+        case 'Pass':
+          this.condition.filters.reviewStatus = [this.selectDataRange];
+          break;
+        case 'UnPass':
+          this.condition.filters.reviewStatus = [this.selectDataRange];
+          break;
+      }
       if (this.projectId) {
         this.condition.projectId = this.projectId;
+        this.$emit('setCondition', this.condition);
         this.result = this.$post(this.buildPagePath('/test/case/list'), this.condition, response => {
           let data = response.data;
           this.total = data.itemCount;
           this.tableData = data.listObject;
           // this.selectIds.clear();
           this.selectRows.clear();
-          this.tableData.forEach(item => {
+          /*this.tableData.forEach(item => {
             if (item.tags && item.tags.length > 0) {
               item.tags = JSON.parse(item.tags);
             }
+          })*/
+          this.tableData.forEach((item) => {
+            item.tags = JSON.parse(item.tags);
+          })
+
+          this.$nextTick(() => {
+            if (this.$refs.table) {
+              setTimeout(this.$refs.table.doLayout, 200);
+            }
+            this.checkTableRowIsSelect();
           })
         });
+      }
+    },
+    checkTableRowIsSelect() {
+      //如果默认全选的话，则选中应该选中的行
+      if (this.condition.selectAll) {
+        let unSelectIds = this.condition.unSelectIds;
+        this.tableData.forEach(row => {
+          if (unSelectIds.indexOf(row.id) < 0) {
+            this.$refs.table.toggleRowSelection(row, true);
+
+            //默认全选，需要把选中对行添加到selectRows中。不然会影响到勾选函数统计
+            if (!this.selectRows.has(row)) {
+              this.$set(row, "showMore", true);
+              this.selectRows.add(row);
+            }
+          } else {
+            //不勾选的行，也要判断是否被加入了selectRow中。加入了的话就去除。
+            if (this.selectRows.has(row)) {
+              this.$set(row, "showMore", false);
+              this.selectRows.delete(row);
+            }
+          }
+        })
       }
     },
     search() {
@@ -375,6 +462,7 @@ export default {
     handleCopy(testCase) {
       this.$get('test/case/get/' + testCase.id, response => {
         let testCase = response.data;
+        testCase.name = 'copy_' + testCase.name
         this.$emit('testCaseCopy', testCase);
       });
     },
@@ -393,15 +481,13 @@ export default {
         confirmButtonText: this.$t('commons.confirm'),
         callback: (action) => {
           if (action === 'confirm') {
-            let param = {};
-            param.ids = Array.from(this.selectRows).map(row => row.id);
-            param.condition = this.condition;
+            let param = buildBatchParam(this);
+            // param.ids = Array.from(this.selectRows).map(row => row.id);
+            // param.condition = this.condition;
             this.$post('/test/case/batch/delete', param, () => {
               this.selectRows.clear();
               this.$emit("refresh");
               this.$success(this.$t('commons.delete_success'));
-              // 发送广播，刷新 head 上的最新列表
-              TrackEvent.$emit(LIST_CHANGE);
             });
           }
         }
@@ -412,8 +498,6 @@ export default {
       this.$post('/test/case/delete/' + testCaseId, {}, () => {
         this.initTableData();
         this.$success(this.$t('commons.delete_success'));
-        // 发送广播，刷新 head 上的最新列表
-        TrackEvent.$emit(LIST_CHANGE);
       });
     },
     refresh() {
@@ -430,36 +514,42 @@ export default {
       this.$emit('testCaseDetail', row);
     },
     handleSelectAll(selection) {
-      _handleSelectAll(this, selection, this.tableData, this.selectRows);
-      this.setUnSelectIds();
+      _handleSelectAll(this, selection, this.tableData, this.selectRows, this.condition);
+      setUnSelectIds(this.tableData, this.condition, this.selectRows);
+      this.selectDataCounts = getSelectDataCounts(this.condition, this.total, this.selectRows);
     },
     handleSelect(selection, row) {
       _handleSelect(this, selection, row, this.selectRows);
-      this.setUnSelectIds();
+      setUnSelectIds(this.tableData, this.condition, this.selectRows);
+      this.selectDataCounts = getSelectDataCounts(this.condition, this.total, this.selectRows);
     },
-
     importTestCase() {
-      if (!getCurrentProjectID()) {
+      if (!this.projectId) {
         this.$warning(this.$t('commons.check_project_tip'));
         return;
       }
       this.$refs.testCaseImport.open();
     },
     exportTestCase() {
-      if (!getCurrentProjectID()) {
+      if (!this.projectId) {
         this.$warning(this.$t('commons.check_project_tip'));
         return;
       }
-      let ids = Array.from(this.selectRows).map(row => row.id);
+
       let config = {
         url: '/test/case/export/testcase',
         method: 'post',
         responseType: 'blob',
-        // data: {ids: [...this.selectIds]}
-        data: {ids: ids, projectId: this.projectId}
+        data: buildBatchParam(this)
       };
+
+      if (config.data.ids === undefined || config.data.ids.length < 1) {
+        this.$warning(this.$t("test_track.case.check_select"));
+        return;
+      }
+
       this.result = this.$request(config).then(response => {
-        const filename = this.$t('test_track.case.test_case') + ".xlsx";
+        const filename = "Metersphere_case_" + localStorage.getItem(PROJECT_NAME) + ".xlsx";
         const blob = new Blob([response.data]);
         if ("download" in document.createElement("a")) {
           let aTag = document.createElement('a');
@@ -475,14 +565,7 @@ export default {
     handleBatch(type) {
       if (this.selectRows.size < 1) {
         if (type === 'export') {
-          this.$alert(this.$t('test_track.case.export_all_cases'), '', {
-            confirmButtonText: this.$t('commons.confirm'),
-            callback: (action) => {
-              if (action === 'confirm') {
-                this.exportTestCase();
-              }
-            }
-          })
+          this.exportTestCase();
           return;
         } else {
           this.$warning(this.$t('test_track.plan_view.select_manipulate'));
@@ -508,8 +591,6 @@ export default {
       this.$post('/test/case/batch/edit', param, () => {
         this.$success(this.$t('commons.save_success'));
         this.refresh();
-        // 发送广播，刷新 head 上的最新列表
-        TrackEvent.$emit(LIST_CHANGE);
       });
     },
     filter(filters) {
@@ -544,31 +625,28 @@ export default {
     },
     isSelectDataAll(data) {
       this.condition.selectAll = data;
-      this.setUnSelectIds();
-      //如果已经全选，不需要再操作了
-      if (this.selectRows.size != this.tableData.length) {
-        this.$refs.table.toggleAllSelection(true);
-      }
+      //设置勾选
+      toggleAllSelection(this.$refs.table, this.tableData, this.selectRows);
+      //显示隐藏菜单
+      _handleSelectAll(this, this.tableData, this.tableData, this.selectRows);
+      //设置未选择ID(更新)
+      this.condition.unSelectIds = [];
+      //更新统计信息
+      this.selectDataCounts = getSelectDataCounts(this.condition, this.total, this.selectRows);
     },
-    setUnSelectIds() {
-      let ids = Array.from(this.selectRows).map(o => o.id);
-      let allIDs = this.tableData.map(o => o.id);
-      this.condition.unSelectIds = allIDs.filter(function (val) {
-        return ids.indexOf(val) === -1
-      });
-      if (this.condition.selectAll) {
-        this.selectDataCounts = this.total - this.condition.unSelectIds.length;
-      } else {
-        this.selectDataCounts = this.selectRows.size;
+    headerDragend(newWidth, oldWidth, column, event) {
+      let finalWidth = newWidth;
+      if (column.minWidth > finalWidth) {
+        finalWidth = column.minWidth;
       }
+      column.width = finalWidth;
+      column.realWidth = finalWidth;
     },
     moveSave(param) {
       param.condition = this.condition;
       this.result = this.$post('/test/case/batch/edit', param, () => {
         this.$success(this.$t('commons.save_success'));
         this.$refs.testBatchMove.close();
-        // 发送广播，刷新 head 上的最新列表
-        TrackEvent.$emit(LIST_CHANGE);
         this.refresh();
       });
     }
@@ -604,5 +682,9 @@ export default {
 
 .el-tag {
   margin-left: 10px;
+}
+
+/deep/ .el-table__fixed-body-wrapper {
+  top: 60px !important;
 }
 </style>

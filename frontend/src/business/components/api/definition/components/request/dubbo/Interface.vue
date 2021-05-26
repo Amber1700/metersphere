@@ -1,7 +1,7 @@
 <template>
   <el-form :model="request" :rules="rules" ref="request" label-width="100px" size="small" v-loading="loading"
            :disabled="isReadOnly">
-    <el-button class="get-provider" type="primary" size="small" @click="getProviderList">Get Provider List</el-button>
+    <el-button class="get-provider" type="primary" size="mini" @click="getProviderList">Get Provider List</el-button>
     <el-row>
       <el-col :span="12">
         <el-form-item label="Interfaces" prop="interfaces">
@@ -117,7 +117,7 @@
 
 <style scoped>
   .get-provider {
-    margin-bottom: 22px;
+    margin: 5px 5px 10px;
   }
 
   .select-100 {

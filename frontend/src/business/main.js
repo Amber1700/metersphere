@@ -10,8 +10,8 @@ import router from "./components/common/router/router";
 import YanProgress from 'yan-progress';
 import './permission' // permission control
 import i18n from "../i18n/i18n";
-import store from "./store";
-import {permission, roles, tester, xpack} from './permission'
+import store from "../store";
+import {permission, roles, tester, xpack, modules} from './permission';
 import chart from "../common/js/chart";
 import CalendarHeatmap from "../common/js/calendar-heatmap";
 import '../common/css/menu-header.css';
@@ -21,6 +21,14 @@ import VueFab from 'vue-float-action-button'
 import {left2RightDrag, bottom2TopDrag, right2LeftDrag} from "../common/js/directive";
 import JsonSchemaEditor from './components/common/json-schema/schema/index';
 import JSONPathPicker from 'vue-jsonpath-picker';
+import VueClipboard from 'vue-clipboard2'
+import vueMinderEditor from 'vue-minder-editor-plus'
+
+import mavonEditor from 'mavon-editor'
+import 'mavon-editor/dist/css/index.css'
+Vue.use(mavonEditor)
+
+Vue.use(vueMinderEditor)
 
 Vue.use(JsonSchemaEditor);
 import VuePapaParse from 'vue-papa-parse'
@@ -40,6 +48,7 @@ Vue.use(CKEditor);
 Vue.use(YanProgress);
 Vue.use(VueFab);
 Vue.use(JSONPathPicker);
+Vue.use(VueClipboard)
 
 // v-permission
 Vue.directive('permission', permission);
@@ -51,10 +60,25 @@ Vue.directive('xpack', xpack);
 
 Vue.directive('tester', tester);
 
+Vue.directive('modules', modules);
+
 //支持左右拖拽
 Vue.directive('left-to-right-drag', left2RightDrag);
 Vue.directive('right-to-left-drag', right2LeftDrag);
 Vue.directive('bottom-to-top-drag', bottom2TopDrag);
+// 防止重复点击
+Vue.directive('preventReClick', {
+  inserted(el, binding) {
+    el.addEventListener('click', () => {
+      if (!el.disabled) {
+        el.disabled = true
+        setTimeout(() => {
+          el.disabled = false
+        }, binding.value || 3000)
+      }
+    })
+  }
+})
 
 new Vue({
   el: '#app',

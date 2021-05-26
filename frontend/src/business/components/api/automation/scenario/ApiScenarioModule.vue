@@ -6,20 +6,21 @@
     <ms-node-tree
       v-loading="result.loading"
       :tree-nodes="data"
+      :allLabel="$t('commons.all_module_title')"
       :type="isReadOnly ? 'view' : 'edit'"
       @add="add"
       @edit="edit"
       @drag="drag"
       @remove="remove"
+      @refresh="list"
       @nodeSelectEvent="nodeChange"
       ref="nodeTree">
 
       <template v-slot:header>
-        <el-input :placeholder="$t('test_track.module.search')" v-model="condition.filterText" size="small">
-          <template v-slot:append>
-            <el-button v-if="!isReadOnly" icon="el-icon-folder-add" @click="addScenario" v-tester/>
-          </template>
-        </el-input>
+        <ms-search-bar
+          :show-operator="showOperator"
+          :condition="condition"
+          :commands="operators"/>
         <module-trash-button v-if="!isReadOnly" :condition="condition" :exe="enableTrash"/>
       </template>
 
@@ -29,6 +30,8 @@
       @saveAsEdit="saveAsEdit"
       @refresh="refresh"
       ref="basisScenario"/>
+
+    <api-import ref="apiImport" :moduleOptions="data" @refreshAll="$emit('refreshAll')"/>
   </div>
 
 </template>
@@ -36,14 +39,17 @@
 <script>
   import SelectMenu from "../../../track/common/SelectMenu";
   import MsAddBasisScenario from "@/business/components/api/automation/scenario/AddBasisScenario";
-  import {getCurrentProjectID} from "@/common/js/utils";
   import MsNodeTree from "../../../track/common/NodeTree";
-  import {buildNodePath} from "../../definition/model/NodeTree";
+  import {buildNodePath, buildTree} from "../../definition/model/NodeTree";
   import ModuleTrashButton from "../../definition/components/module/ModuleTrashButton";
+  import ApiImport from "./common/ScenarioImport";
+  import MsSearchBar from "@/business/components/common/components/search/MsSearchBar";
 
   export default {
     name: 'MsApiScenarioModule',
     components: {
+      MsSearchBar,
+      ApiImport,
       ModuleTrashButton,
       MsNodeTree,
       MsAddBasisScenario,
@@ -56,6 +62,7 @@
           return false
         }
       },
+      showOperator: Boolean,
       relevanceProjectId: String,
       planId: String
     },
@@ -65,7 +72,10 @@
       },
       isRelevanceModel() {
         return this.relevanceProjectId ? true : false;
-      }
+      },
+      projectId() {
+        return this.$store.state.projectId
+      },
     },
     data() {
       return {
@@ -74,13 +84,38 @@
           filterText: "",
           trashEnable: false
         },
-        projectId: "",
         data: [],
         currentModule: undefined,
+        operators: [
+          {
+            label: this.$t('api_test.automation.add_scenario'),
+            callback: this.addScenario
+          },
+          {
+            label: this.$t('api_test.api_import.label'),
+            callback: this.handleImport
+          },
+          {
+            label: this.$t('report.export'),
+            children: [
+              {
+                label: this.$t('report.export_to_ms_format'),
+                callback: () => {
+                  this.$emit('exportAPI');
+                }
+              },
+              {
+                label: this.$t('report.export') + 'JMETER 格式',
+                callback: () => {
+                  this.$emit('exportJmx');
+                }
+              }
+            ]
+          }
+        ]
       }
     },
     mounted() {
-      this.projectId = getCurrentProjectID();
       this.list();
     },
     watch: {
@@ -98,15 +133,51 @@
       }
     },
     methods: {
-
-      list() {
+      handleCommand(e) {
+        switch (e) {
+          case "add-scenario":
+            this.addScenario();
+            break;
+          case "import":
+            this.result = this.$get("/api/automation/module/list/" + this.projectId, response => {
+              if (response.data != undefined && response.data != null) {
+                this.data = response.data;
+                this.data.forEach(node => {
+                  buildTree(node, {path: ''});
+                });
+              }
+            });
+            this.$refs.apiImport.open(this.currentModule);
+            break;
+          case "export":
+            this.$emit('exportAPI');
+            break;
+          case "exportJmx":
+            this.$emit('exportJmx');
+            break;
+        }
+      },
+      handleImport() {
+        if (this.projectId) {
+          this.result = this.$get("/api/automation/module/list/" + this.projectId, response => {
+            if (response.data != undefined && response.data != null) {
+              this.data = response.data;
+              this.data.forEach(node => {
+                buildTree(node, {path: ''});
+              });
+            }
+          });
+          this.$refs.apiImport.open(this.currentModule);
+        }
+      },
+      list(projectId) {
         let url = undefined;
         if (this.isPlanModel) {
           url = '/api/automation/module/list/plan/' + this.planId;
         } else if (this.isRelevanceModel) {
           url = "/api/automation/module/list/" + this.relevanceProjectId;
         } else {
-          url = "/api/automation/module/list/" + this.projectId;
+          url = "/api/automation/module/list/" + (projectId ? projectId : this.projectId);
           if (!this.projectId) {
             return;
           }
@@ -114,11 +185,10 @@
         this.result = this.$get(url, response => {
           if (response.data != undefined && response.data != null) {
             this.data = response.data;
-            let moduleOptions = [];
             this.data.forEach(node => {
-              buildNodePath(node, {path: ''}, moduleOptions);
+              buildTree(node, {path: ''});
             });
-            this.$emit('setModuleOptions', moduleOptions);
+            this.$emit('setModuleOptions', this.data);
             this.$emit('setNodeTree', this.data);
             if (this.$refs.nodeTree) {
               this.$refs.nodeTree.filter(this.condition.filterText);
@@ -174,9 +244,9 @@
           this.$emit("nodeSelectEvent", node, nodeIds, pNodes);
         }
       },
-      // exportAPI() {
-      //   this.$emit('exportAPI');
-      // },
+      exportAPI() {
+        this.$emit('exportAPI');
+      },
       // debug() {
       //   this.$emit('debug');
       // },
@@ -187,7 +257,7 @@
         this.$emit("refreshTable");
       },
       addScenario() {
-        if (!getCurrentProjectID()) {
+        if (!this.projectId) {
           this.$warning(this.$t('commons.check_project_tip'));
           return;
         }

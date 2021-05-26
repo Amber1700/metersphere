@@ -1,7 +1,7 @@
 <template>
   <div class="failure-cases-list">
     <div class="failure-cases-list-header">
-      场景测试用例
+      {{$t('test_track.plan.scenario_case')}}
     </div>
 
     <el-table
@@ -20,9 +20,7 @@
 
       <el-table-column prop="tags" :label="$t('api_test.automation.tag')" width="200px">
         <template v-slot:default="scope">
-          <div v-for="(itemName,index)  in scope.row.tags" :key="index">
-            <ms-tag type="success" effect="plain" :content="itemName"/>
-          </div>
+            <ms-tag v-for="(itemName,index)  in scope.row.tags" :key="index" type="success" effect="plain" :content="itemName" style="margin-left: 0px; margin-right: 2px"/>
         </template>
       </el-table-column>
 
@@ -64,9 +62,21 @@
       name: "ScenarioFailureCasesList",
       components: {MsTag, PriorityTableItem, TypeTableItem, MethodTableItem, StatusTableItem},
       props: ['scenarioTestCases'],
+      watch: {
+        scenarioTestCases() {
+          this.parseTags();
+        }
+      },
       methods: {
         goFailureTestCase(row) {
           this.$emit("openFailureTestCase", row);
+        },
+        parseTags() {
+          this.scenarioTestCases.forEach(item => {
+            if (item.tags && item.tags.length > 0) {
+              item.tags = JSON.parse(item.tags);
+            }
+          });
         }
       }
     }

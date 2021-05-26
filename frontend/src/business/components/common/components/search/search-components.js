@@ -172,6 +172,22 @@ export const API_CASE_RESULT = {
   }
 }
 
+export const API_SCENARIO_RESULT = {
+  key: "status",
+  name: 'MsTableSearchSelect',
+  label: 'test_track.plan_view.execute_result',
+  operator: {
+    options: [OPERATORS.IN, OPERATORS.NOT_IN]
+  },
+  options: [
+    {value: 'Success', label: 'api_test.automation.success'},
+    {value: 'Fail', label: 'api_test.automation.fail'}
+  ],
+  props: { // 尾部控件的props，一般为element ui控件的props
+    multiple: true
+  }
+}
+
 export const API_METHOD = {
   key: "method",
   name: 'MsTableSearchSelect',
@@ -430,16 +446,35 @@ export const TEST_PLAN_TRIGGER_MODE = {
   }
 };
 
+export const CASE_REVIEW_STATUS = {
+  key: "reviewStatus",
+  name: 'MsTableSearchSelect',
+  label: "test_track.review_view.execute_result",
+  operator: {
+    options: [OPERATORS.IN, OPERATORS.NOT_IN]
+  },
+  options: [
+    {label: "test_track.review.prepare", value: "Prepare"},
+    {label: "test_track.review.pass", value: "Pass"},
+    {label: "test_track.review.un_pass", value: "UnPass"},
+  ],
+  props: {
+    multiple: true
+  }
+}
+
 export const TEST_CONFIGS = [NAME, UPDATE_TIME, CREATE_TIME, STATUS, CREATOR];
 
 export const REPORT_CONFIGS = [NAME, TEST_NAME, CREATE_TIME, STATUS, CREATOR, TRIGGER_MODE];
 
-export const TEST_CASE_CONFIGS = [NAME, API_TAGS, MODULE, PRIORITY, CREATE_TIME, TYPE, UPDATE_TIME, METHOD, CREATOR, EXECUTOR];
+export const TEST_CASE_CONFIGS = [NAME, API_TAGS, MODULE, PRIORITY, CREATE_TIME, TYPE, UPDATE_TIME, METHOD, CREATOR, EXECUTOR, CASE_REVIEW_STATUS];
 
 export const TEST_PLAN_CONFIGS = [NAME, UPDATE_TIME, CREATE_TIME, PRINCIPAL, TEST_PLAN_STATUS, STAGE];
 
 export const API_DEFINITION_CONFIGS = [NAME, API_METHOD, API_PATH, API_STATUS, API_TAGS, UPDATE_TIME, CREATE_TIME, CREATOR];
 
 export const API_CASE_CONFIGS = [NAME, API_CASE_PRIORITY, API_TAGS, API_CASE_RESULT, UPDATE_TIME, CREATE_TIME, CREATOR];
+
+export const API_SCENARIO_CONFIGS = [NAME, API_CASE_PRIORITY, API_TAGS, API_SCENARIO_RESULT, UPDATE_TIME, CREATE_TIME, CREATOR];
 
 export const TEST_PLAN_REPORT_CONFIGS = [NAME, TEST_PLAN_NAME,CREATOR, CREATE_TIME, TEST_PLAN_TRIGGER_MODE, TEST_PLAN_STATUS];

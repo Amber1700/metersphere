@@ -8,7 +8,7 @@
                @close="close"
                width="65%">
 
-      <el-form :model="form" :rules="rules" ref="planFrom">
+      <el-form :model="form" :rules="rules" ref="planFrom" v-if="isStepTableAlive">
 
         <el-row>
           <el-col :span="8" :offset="1">
@@ -19,28 +19,9 @@
               <el-input v-model="form.name" :placeholder="$t('test_track.plan.input_plan_name')"></el-input>
             </el-form-item>
           </el-col>
-
-          <el-col :span="11" :offset="2">
-            <el-form-item :label-width="formLabelWidth" prop="projectIds">
-              <template slot="label">
-                <el-tooltip class="item" effect="dark" :content="$t('test_track.plan.related_tip')" placement="top">
-                  <i class="el-icon-warning"/>
-                </el-tooltip>
-                {{ $t('test_track.plan.related_project') }}
-              </template>
-              <el-select
-                v-model="form.projectIds"
-                :placeholder="$t('test_track.plan.input_related_project')"
-                multiple
-                style="width: 100%"
-                filterable>
-                <el-option
-                  v-for="item in projects"
-                  :key="item.id"
-                  :label="item.name"
-                  :value="item.id">
-                </el-option>
-              </el-select>
+          <el-col :span="10" :offset="1">
+            <el-form-item :label="$t('commons.tag')" :label-width="formLabelWidth" prop="tag">
+              <ms-input-tag :currentScenario="form" ref="tag"/>
             </el-form-item>
           </el-col>
         </el-row>
@@ -50,9 +31,9 @@
             <el-form-item :label="$t('test_track.plan.plan_principal')" :label-width="formLabelWidth" prop="principal">
               <el-select v-model="form.principal" :placeholder="$t('test_track.plan.input_plan_principal')" filterable>
                 <el-option
-                  v-for="item in principalOptions"
+                  v-for="(item) in principalOptions"
                   :key="item.id"
-                  :label="item.name"
+                  :label="item.name + '(' + item.id + ')'"
                   :value="item.id">
                 </el-option>
               </el-select>
@@ -117,6 +98,7 @@
       </el-form>
 
       <template v-slot:footer>
+
         <div class="dialog-footer">
           <el-button
             @click="dialogFormVisible = false">
@@ -126,6 +108,9 @@
             type="primary"
             @click="savePlan">
             {{ $t('test_track.confirm') }}
+          </el-button>
+          <el-button type="primary" @click="testPlanInfo">
+            {{ $t('test_track.planning_execution') }}
           </el-button>
         </div>
       </template>
@@ -140,14 +125,16 @@
 
 import {WORKSPACE_ID} from '@/common/js/constants';
 import TestPlanStatusButton from "../common/TestPlanStatusButton";
-import {getCurrentProjectID, listenGoBack, removeGoBackListener} from "@/common/js/utils";
+import {listenGoBack, removeGoBackListener} from "@/common/js/utils";
 import {LIST_CHANGE, TrackEvent} from "@/business/components/common/head/ListEvent";
+import MsInputTag from "@/business/components/api/automation/scenario/MsInputTag";
 
 export default {
   name: "TestPlanEdit",
-  components: {TestPlanStatusButton},
+  components: {TestPlanStatusButton, MsInputTag},
   data() {
     return {
+      isStepTableAlive: true,
       dialogFormVisible: false,
       form: {
         name: '',
@@ -158,27 +145,33 @@ export default {
         plannedStartTime: '',
         plannedEndTime: ''
       },
-      dbProjectIds: [],
       rules: {
         name: [
           {required: true, message: this.$t('test_track.plan.input_plan_name'), trigger: 'blur'},
           {max: 30, message: this.$t('test_track.length_less_than') + '30', trigger: 'blur'}
         ],
-        // projectIds: [{required: true, message: this.$t('test_track.plan.input_plan_project'), trigger: 'change'}],
         principal: [{required: true, message: this.$t('test_track.plan.input_plan_principal'), trigger: 'change'}],
         stage: [{required: true, message: this.$t('test_track.plan.input_plan_stage'), trigger: 'change'}],
         description: [{max: 200, message: this.$t('test_track.length_less_than') + '200', trigger: 'blur'}]
       },
       formLabelWidth: "120px",
       operationType: '',
-      projects: [],
       principalOptions: []
     };
   },
+  created() {
+    //设置“测试阶段”和“负责人”的默认值
+    this.form.stage = 'smoke';
+    const adminToken = JSON.parse(localStorage.getItem("Admin-Token"));
+    this.form.principal = adminToken.id;
+  },
   methods: {
+    reload() {
+      this.isStepTableAlive = false;
+      this.$nextTick(() => (this.isStepTableAlive = true));
+    },
     openTestPlanEditDialog(testPlan) {
       this.resetForm();
-      this.getProjects();
       this.setPrincipalOptions();
       this.operationType = 'add';
       if (testPlan) {
@@ -187,10 +180,39 @@ export default {
         let tmp = {};
         Object.assign(tmp, testPlan);
         Object.assign(this.form, tmp);
-        this.dbProjectIds = JSON.parse(JSON.stringify(this.form.projectIds));
+      } else {
+        this.form.tags = [];
       }
       listenGoBack(this.close);
       this.dialogFormVisible = true;
+      this.reload();
+    },
+    testPlanInfo() {
+      this.$refs['planFrom'].validate((valid) => {
+        if (valid) {
+          let param = {};
+          Object.assign(param, this.form);
+          param.name = param.name.trim();
+          if (param.name === '') {
+            this.$warning(this.$t('test_track.plan.input_plan_name'));
+            return;
+          }
+          param.workspaceId = localStorage.getItem(WORKSPACE_ID);
+          if (this.form.tags instanceof Array) {
+            this.form.tags = JSON.stringify(this.form.tags);
+          }
+          param.tags = this.form.tags;
+          this.$post('/test/plan/' + this.operationType, param, response => {
+            this.$success(this.$t('commons.save_success'));
+            this.dialogFormVisible = false;
+            this.$router.push('/track/plan/view/' + response.data);
+            // 发送广播，刷新 head 上的最新列表
+            TrackEvent.$emit(LIST_CHANGE);
+          });
+        } else {
+          return false;
+        }
+      });
     },
     savePlan() {
       this.$refs['planFrom'].validate((valid) => {
@@ -198,34 +220,22 @@ export default {
           let param = {};
           Object.assign(param, this.form);
           param.name = param.name.trim();
-          if (!this.validate(param)) {
+          if (param.name === '') {
+            this.$warning(this.$t('test_track.plan.input_plan_name'));
             return;
           }
           param.workspaceId = localStorage.getItem(WORKSPACE_ID);
-
-          if (this.operationType === 'edit') {
-            const nowIds = param.projectIds;
-            let sign = true;
-            this.dbProjectIds.forEach(dbId => {
-              if (nowIds.indexOf(dbId) === -1 && sign) {
-                sign = false;
-                this.$confirm(this.$t('test_track.case.cancel_relevance_project'), this.$t('commons.prompt'), {
-                  confirmButtonText: this.$t('commons.confirm'),
-                  cancelButtonText: this.$t('commons.cancel'),
-                  type: 'warning'
-                }).then(() => {
-                  this.editTestPlan(param);
-                }).catch(() => {
-                  this.$info(this.$t('commons.cancel'))
-                });
-              }
-            });
-            if (sign) {
-              this.editTestPlan(param);
-            }
-          } else {
-            this.editTestPlan(param);
+          if (this.form.tags instanceof Array) {
+            this.form.tags = JSON.stringify(this.form.tags);
           }
+          param.tags = this.form.tags;
+          this.$post('/test/plan/' + this.operationType, param, () => {
+            this.$success(this.$t('commons.save_success'));
+            this.dialogFormVisible = false;
+            this.$emit("refresh");
+            // 发送广播，刷新 head 上的最新列表
+            TrackEvent.$emit(LIST_CHANGE);
+          });
         } else {
           return false;
         }
@@ -241,24 +251,6 @@ export default {
         return false;
       }
       return true;
-    },
-    editTestPlan(param) {
-      this.$post('/test/plan/' + this.operationType, param, () => {
-        this.$success(this.$t('commons.save_success'));
-        this.dialogFormVisible = false;
-        this.$emit("refresh");
-        // 发送广播，刷新 head 上的最新列表
-        TrackEvent.$emit(LIST_CHANGE);
-      });
-    },
-    getProjects() {
-      this.$get("/project/listAll", (response) => {
-        if (response.success) {
-          this.projects = response.data.filter(da => da.id !== getCurrentProjectID());
-        } else {
-          this.$warning()(response.message);
-        }
-      });
     },
     setPrincipalOptions() {
       let workspaceId = localStorage.getItem(WORKSPACE_ID);
@@ -281,8 +273,9 @@ export default {
           this.$refs['planFrom'].resetFields();
           this.form.name = '';
           this.form.projectIds = [];
-          this.form.principal = '';
-          this.form.stage = '';
+          const adminToken = JSON.parse(localStorage.getItem("Admin-Token"));
+          this.form.principal = adminToken.id;
+          this.form.stage = 'smoke';
           this.form.description = '';
           this.form.status = null;
           this.form.plannedStartTime = null;

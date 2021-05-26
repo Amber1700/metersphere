@@ -2,15 +2,19 @@
 
   <div class="card-container" v-loading="loading">
     <el-card class="card-content">
-      <el-dropdown split-button type="primary" class="ms-api-buttion" @click="handleCommand"
+      <el-button v-if="scenario" style="float: right;margin-right: 20px" size="small" type="primary"
+                 @click="handleCommand"> {{ $t('commons.test') }}
+      </el-button>
+
+      <el-dropdown v-else split-button type="primary" class="ms-api-buttion" @click="handleCommand"
                    @command="handleCommand" size="small" style="float: right;margin-right: 20px">
-        {{$t('commons.test')}}
+        {{ $t('commons.test') }}
         <el-dropdown-menu slot="dropdown">
-          <el-dropdown-item command="save_as">{{$t('api_test.definition.request.save_as_case')}}</el-dropdown-item>
+          <el-dropdown-item command="save_as">{{ $t('api_test.definition.request.save_as_case') }}</el-dropdown-item>
         </el-dropdown-menu>
       </el-dropdown>
 
-      <p class="tip">{{$t('api_test.definition.request.req_param')}} </p>
+      <p class="tip">{{ $t('api_test.definition.request.req_param') }} </p>
       <!-- JDBC 请求参数 -->
       <ms-basis-parameters :request="request" @callback="runDebug" ref="requestForm"/>
 
@@ -28,7 +32,7 @@
       <el-button style="float: right;margin: 20px" type="primary" @click="handleCommand('save_as_api')"> {{$t('commons.save')}}</el-button>
     </div>
     <!-- 加载用例 -->
-    <ms-api-case-list :loaded="false" ref="caseList"/>
+    <ms-api-case-list @refreshModule="refreshModule" :loaded="false" ref="caseList"/>
 
   </div>
 
@@ -37,7 +41,7 @@
 <script>
   import MsResponseResult from "../response/ResponseResult";
   import MsRequestMetric from "../response/RequestMetric";
-  import {getUUID, getCurrentUser} from "@/common/js/utils";
+  import {getUUID} from "@/common/js/utils";
   import MsResponseText from "../response/ResponseText";
   import MsRun from "../Run";
   import {createComponent} from "../jmeter/components";
@@ -49,7 +53,16 @@
 
   export default {
     name: "ApiConfig",
-    components: {MsRequestResultTail, MsResponseResult, MsRequestMetric, MsResponseText, MsRun, MsBasisParameters, MsJmxStep,MsApiCaseList},
+    components: {
+      MsRequestResultTail,
+      MsResponseResult,
+      MsRequestMetric,
+      MsResponseText,
+      MsRun,
+      MsBasisParameters,
+      MsJmxStep,
+      MsApiCaseList
+    },
     props: {
       currentProtocol: String,
       scenario: Boolean,
@@ -112,7 +125,9 @@
           this.$refs['requestForm'].validate();
         }
       },
-
+      refreshModule() {
+        this.$emit('refreshModule');
+      },
       runDebug() {
         this.loading = true;
         this.request.name = getUUID().substring(0, 8);
